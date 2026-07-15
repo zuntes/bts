@@ -1,0 +1,46 @@
+# ============================================================================
+# Phương án migrate: PUSH CẢ PROJECT qua git (gsplat đã patch, đã xóa .git → tracked).
+# Data + .venv + output KHÔNG qua git (chuyển riêng / rebuild trên server).
+# ============================================================================
+
+# ----- Môi trường: rebuild trên server bằng tools/SETUP_*.sh -----
+.venv/
+3dgrut/
+__pycache__/
+*.pyc
+*.egg-info/
+*.so
+
+# ----- gsplat: GIỮ code đã patch, bỏ build artifact + docs 25M không cần -----
+gsplat/build/
+gsplat/docs/
+
+# ----- Output lớn / tái tạo được (KHÔNG migrate) -----
+renders/
+renders_*/
+workspace/
+workspace_raw/
+runs/
+*.zip
+*.pt
+*.ckpt
+
+# ----- results/: CHỈ giữ experiments.csv (bảng kết quả tham chiếu) -----
+results/*
+!results/experiments.csv
+
+# ----- Dữ liệu thô: quá lớn cho git → chuyển riêng qua rsync/scp -----
+VAI_NVS_DATA/
+
+# ----- CHỈ-CLAUDE-ĐỌC: server KHÔNG có Claude → không cần, và repo PUBLIC → bớt phơi playbook -----
+# (git là luồng MỘT CHIỀU: local → server pull. Server không push lại; kết quả về qua terminal dán.)
+# Các thư mục này chỉ sống ở máy local — NHỚ backup riêng (ổ ngoài), git không giữ hộ nữa.
+.claude/
+docs/
+notebooks/
+
+# ----- GIỮ LẠI (tracked) = đúng thứ SERVER cần chạy: -----
+#   tools/            script pipeline + patches + SETUP_*/GATE_*
+#   gsplat/           code đã patch (raw_distortion, global_seed, T3, fused-ssim fallback, L14)
+#   results/experiments.csv   bảng kết quả (nhỏ, tiện đối chiếu + backup)
+#   MIGRATE.md        trạng thái server + cách chạy

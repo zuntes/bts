@@ -1,0 +1,182 @@
+diff --git a/examples/datasets/colmap.py b/examples/datasets/colmap.py
+index 6c21f2c..6d6673c 100644
+--- a/examples/datasets/colmap.py
++++ b/examples/datasets/colmap.py
+@@ -62,11 +62,13 @@ class Parser:
+         factor: int = 1,
+         normalize: bool = False,
+         test_every: int = 8,
++        keep_distortion: bool = False,
+     ):
+         self.data_dir = data_dir
+         self.factor = factor
+         self.normalize = normalize
+         self.test_every = test_every
++        self.keep_distortion = keep_distortion
+ 
+         colmap_dir = os.path.join(data_dir, "sparse/0/")
+         if not os.path.exists(colmap_dir):
+@@ -276,10 +278,21 @@ class Parser:
+         self.mapx_dict = dict()
+         self.mapy_dict = dict()
+         self.roi_undist_dict = dict()
++        # BTS 3DGUT: camera_id -> OpenCV params [k1, k2, p1, p2] của ảnh méo gốc,
++        # dùng làm radial/tangential_coeffs cho rasterization thay vì undistort ảnh
++        self.raw_distortion_dict = dict()
+         for camera_id in self.params_dict.keys():
+             params = self.params_dict[camera_id]
+             if len(params) == 0:
+                 continue  # no distortion
++            if self.keep_distortion:
++                assert camtype == "perspective", (
++                    "keep_distortion chỉ hỗ trợ camera perspective (OpenCV pinhole)"
++                )
++                self.raw_distortion_dict[camera_id] = params.copy()
++                # params rỗng → Dataset không remap; Ks/imsize giữ nguyên camera gốc
++                self.params_dict[camera_id] = np.empty(0, dtype=np.float32)
++                continue
+             assert camera_id in self.Ks_dict, f"Missing K for camera {camera_id}"
+             assert (
+                 camera_id in self.params_dict
+diff --git a/examples/simple_trainer.py b/examples/simple_trainer.py
+index 6a30be7..159301b 100644
+--- a/examples/simple_trainer.py
++++ b/examples/simple_trainer.py
+@@ -21,7 +21,15 @@ from datasets.traj import (
+     generate_interpolated_path,
+     generate_spiral_path,
+ )
+-from fused_ssim import fused_ssim
++try:
++    from fused_ssim import fused_ssim
++except ImportError:
++    # fallback khi không build được fused-ssim (thiếu nvcc): dùng torchmetrics,
++    # cùng công thức SSIM (kernel 11, gaussian), chậm hơn ~10-15%
++    from torchmetrics.functional import structural_similarity_index_measure as _tm_ssim
++
++    def fused_ssim(img1, img2, padding="valid"):
++        return _tm_ssim(img1, img2, data_range=1.0)
+ from torch import Tensor
+ from torch.nn.parallel import DistributedDataParallel as DDP
+ from torch.utils.tensorboard import SummaryWriter
+@@ -73,6 +81,8 @@ class Config:
+ 
+     # Batch size for training. Learning rates are scaled automatically
+     batch_size: int = 1
++    # BTS GB1: seed cho ensemble multi-seed (mặc định 42 = hành vi cũ)
++    global_seed: int = 42
+     # A global factor to scale the number of training steps
+     steps_scaler: float = 1.0
+ 
+@@ -183,6 +193,15 @@ class Config:
+     # 3DGUT (uncented transform + eval 3D)
+     with_ut: bool = False
+     with_eval3d: bool = False
++    # BTS: train trực tiếp trên ảnh MÉO GỐC (workspace prepare_scene --keep_distortion).
++    # Parser bỏ undistort; distortion COLMAP được đưa vào rasterization qua
++    # radial/tangential_coeffs (cần with_ut + with_eval3d — 3DGUT).
++    raw_distortion: bool = False
++    # BTS L14: MCMC hướng test-frustum — decay opacity gaussians vô hình từ mọi
++    # test pose để relocation dồn ngân sách cap vào vùng được chấm (tools/l14_...py)
++    test_frustum_csv: Optional[str] = None
++    test_frustum_decay: float = 0.995
++    test_frustum_every: int = 500
+ 
+     # Whether use fused-bilateral grid
+     use_fused_bilagrid: bool = False
+@@ -306,7 +325,7 @@ class Runner:
+     def __init__(
+         self, local_rank: int, world_rank, world_size: int, cfg: Config
+     ) -> None:
+-        set_random_seed(42 + local_rank)
++        set_random_seed(cfg.global_seed + local_rank)
+ 
+         self.cfg = cfg
+         self.world_rank = world_rank
+@@ -336,7 +355,31 @@ class Runner:
+             factor=cfg.data_factor,
+             normalize=cfg.normalize_world_space,
+             test_every=cfg.test_every,
++            keep_distortion=cfg.raw_distortion,
+         )
++        # BTS 3DGUT: distortion per-camera cho rasterization (scene 1 camera)
++        self.radial_coeffs = None
++        self.tangential_coeffs = None
++        if cfg.raw_distortion:
++            assert cfg.with_ut and cfg.with_eval3d, (
++                "--raw-distortion cần --with-ut --with-eval3d (3DGUT)"
++            )
++            dists = list(self.parser.raw_distortion_dict.values())
++            assert len(dists) > 0, (
++                "--raw-distortion nhưng workspace không có camera méo — "
++                "dùng prepare_scene.py --keep_distortion"
++            )
++            assert all(np.allclose(d, dists[0]) for d in dists), (
++                "raw_distortion hiện chỉ hỗ trợ 1 bộ distortion chung"
++            )
++            k1, k2, p1, p2 = [float(v) for v in dists[0]]
++            self.radial_coeffs = torch.tensor(
++                [[k1, k2, 0.0, 0.0, 0.0, 0.0]], device=self.device
++            )
++            if p1 != 0.0 or p2 != 0.0:
++                self.tangential_coeffs = torch.tensor([[p1, p2]], device=self.device)
++            print(f"[BTS raw_distortion] radial=[{k1:.6f}, {k2:.6f}], "
++                  f"tangential=[{p1:.6f}, {p2:.6f}]")
+         self.trainset = Dataset(
+             self.parser,
+             split="train",
+@@ -374,6 +417,42 @@ class Runner:
+         )
+         print("Model initialized. Number of GS:", len(self.splats["means"]))
+ 
++        # BTS L14: thay MCMCStrategy bằng TestFrustumMCMC nếu có test poses
++        if cfg.test_frustum_csv is not None:
++            assert isinstance(self.cfg.strategy, MCMCStrategy), "L14 chỉ cho MCMC"
++            import csv as _csv
++            import dataclasses as _dc
++            import sys as _sys
++            from datasets.normalize import transform_cameras
++            _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
++            from l14_mcmc_testfrustum import TestFrustumMCMC
++
++            def _q2R(w, x, y, z):
++                return np.array([
++                    [1-2*y*y-2*z*z, 2*x*y-2*z*w, 2*x*z+2*y*w],
++                    [2*x*y+2*z*w, 1-2*x*x-2*z*z, 2*y*z-2*x*w],
++                    [2*x*z-2*y*w, 2*y*z+2*x*w, 1-2*x*x-2*y*y]])
++
++            _vms, _Ks = [], []
++            _W = _H = None
++            for r in _csv.DictReader(open(cfg.test_frustum_csv)):
++                w2c = np.eye(4)
++                w2c[:3, :3] = _q2R(*[float(r[k]) for k in ("qw", "qx", "qy", "qz")])
++                w2c[:3, 3] = [float(r[k]) for k in ("tx", "ty", "tz")]
++                c2w = transform_cameras(
++                    self.parser.transform, np.linalg.inv(w2c)[None])[0]
++                _vms.append(torch.from_numpy(np.linalg.inv(c2w)).float())
++                _Ks.append(torch.tensor(
++                    [[float(r["fx"]), 0, float(r["cx"])],
++                     [0, float(r["fy"]), float(r["cy"])], [0, 0, 1.0]]).float())
++                _W, _H = int(r["width"]), int(r["height"])
++            self.cfg.strategy = TestFrustumMCMC(
++                **_dc.asdict(self.cfg.strategy),
++                test_viewmats=_vms, test_Ks=_Ks, wh=(_W, _H),
++                decay=cfg.test_frustum_decay, every=cfg.test_frustum_every)
++            print(f"[BTS L14] TestFrustumMCMC: {len(_vms)} test poses, "
++                  f"decay={cfg.test_frustum_decay} mỗi {cfg.test_frustum_every} steps")
++
+         # Densification Strategy
+         self.cfg.strategy.check_sanity(self.splats, self.optimizers)
+ 
+@@ -514,6 +593,11 @@ class Runner:
+             rasterize_mode = "antialiased" if self.cfg.antialiased else "classic"
+         if camera_model is None:
+             camera_model = self.cfg.camera_model
++        if self.radial_coeffs is not None and "radial_coeffs" not in kwargs:
++            C = camtoworlds.shape[0]
++            kwargs["radial_coeffs"] = self.radial_coeffs.expand(C, -1)
++            if self.tangential_coeffs is not None:
++                kwargs["tangential_coeffs"] = self.tangential_coeffs.expand(C, -1)
+         render_colors, render_alphas, info = rasterization(
+             means=means,
+             quats=quats,
