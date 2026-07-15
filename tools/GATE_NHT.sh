@@ -117,18 +117,9 @@ echo "  ✅ render đủ 60 ảnh"
 say "6. Chấm v50 (LPIPS-vgg, PSNR_max=50 — thang BTC)"
 .venv/bin/python tools/score_local.py --pred_dir "$RD/ours_30000/renders" \
   --gt_dir "$RD/ours_30000/gt" --out results/${SCENE}__nht5M_score.json 2>&1 \
-  | grep -aE "n=|★|Score\[" || die "score_local thất bại"
+  | tee results/${SCENE}__nht5M_v50.txt | grep -aE "n=|★|Score\[" || die "score_local thất bại"
 
-V50=$(.venv/bin/python -c "
-import json,sys
-try:
-    d=json.load(open('results/${SCENE}__nht5M_score.json'))
-    r=d if isinstance(d,list) else d.get('per_image',[])
-    import statistics as st
-    p=st.mean(float(x['psnr']) for x in r); s=st.mean(float(x['ssim']) for x in r); l=st.mean(float(x['lpips_vgg']) for x in r)
-    print(f'{0.4*(1-l)+0.3*s+0.3*min(p/50,1):.5f}')
-except Exception as e: print('ERR')
-" 2>/dev/null)
+V50=$(grep -aoE "Score_BTC\[[^]]*\] = [0-9.]+" results/${SCENE}__nht5M_v50.txt 2>/dev/null | grep -oE "[0-9]+\.[0-9]+" | tail -1)
 
 echo
 echo "########################################################################"
