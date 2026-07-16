@@ -46,33 +46,52 @@ else
 fi
 
 # ============================== B2 — POSE REFINE ==============================
-say "B2.0 pycolmap (verify KHÔNG PHẢI gói rác/trùng tên — đã dính 'pycolmap 0.0.1' không có Reconstruction)"
-need_install=1
-if $PY -c "import pycolmap; assert hasattr(pycolmap,'Reconstruction')" 2>/dev/null; then need_install=0; fi
-if [ "$need_install" = 1 ]; then
-  echo "  → (chưa có / là gói giả) cài pycolmap==4.1.0 từ PyPI chính thức (đã verify local đủ Reconstruction/Sim3d/BA)..."
-  $PY -m pip install -q --force-reinstall --no-cache-dir --index-url https://pypi.org/simple "pycolmap==4.1.0" \
-    || die "pip pycolmap fail — có thể server dùng mirror nội bộ chặn pypi.org, báo mình"
+say "B2.0 HAI gói 'pycolmap' TRÙNG TÊN → tách 2 venv (bài học 16/07, DOC3 §3.7)"
+# 'pycolmap' rmbrualla (version 0.0.1, có SceneManager — gsplat BẮT BUỘC để train) và
+# 'pycolmap' chính thức COLMAP (4.1.0, có Reconstruction/BA — pose_refine cần) TRÙNG TÊN.
+# Đã trả giá: force-reinstall 4.1.0 vào .venv đè mất SceneManager → MỌI train gsplat gãy.
+# → .venv giữ bản rmbrualla; BA chạy bằng venv riêng .venv_ba.
+
+# 0a. .venv phải còn SceneManager (tự chữa nếu đã lỡ bị 4.1.0 đè)
+if ! $PY -c "from pycolmap import SceneManager" 2>/dev/null; then
+  echo "  ⚠ .venv mất SceneManager (bị pycolmap 4.1.0 đè) → cài lại bản rmbrualla cho gsplat..."
+  $PY -m pip install -q --force-reinstall --no-cache-dir \
+    "git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b32125e" \
+    || die "cài lại pycolmap rmbrualla fail — dán output pip"
 fi
-$PY -c "
-import pycolmap
-assert hasattr(pycolmap, 'Reconstruction'), 'VẪN LÀ GÓI GIẢ sau khi cài — kiểm pip config/mirror'
-try: v = pycolmap.__version__
-except AttributeError:
-    import importlib.metadata
-    try: v = importlib.metadata.version('pycolmap')
-    except Exception: v = '?'
-print('  ✅ pycolmap', v, '(có Reconstruction — gói thật)')
-" || die "pycolmap vẫn không dùng được sau cài — dán output pip config list + pip index versions pycolmap"
+$PY -c "from pycolmap import SceneManager" 2>/dev/null \
+  || die ".venv vẫn thiếu SceneManager — train gsplat sẽ gãy, DỪNG"
+echo "  ✅ .venv: pycolmap rmbrualla (SceneManager) — train gsplat OK"
+
+# 0b. venv riêng .venv_ba cho pycolmap chính thức (KHÔNG BAO GIỜ cài 4.1.0 vào .venv)
+BA_PY=.venv_ba/bin/python
+if ! [ -x "$BA_PY" ]; then
+  echo "  → tạo .venv_ba (chỉ chứa pycolmap COLMAP chính thức + numpy)..."
+  python3.10 -m venv .venv_ba || die "tạo .venv_ba fail (cần python3.10 trên PATH)"
+  $BA_PY -m pip install -q --upgrade pip
+fi
+if ! $BA_PY -c "import pycolmap; assert hasattr(pycolmap,'Reconstruction')" 2>/dev/null; then
+  $BA_PY -m pip install -q --no-cache-dir --index-url https://pypi.org/simple "pycolmap==4.1.0" numpy \
+    || die "pip pycolmap==4.1.0 vào .venv_ba fail — mirror nội bộ chặn pypi.org?"
+fi
+$BA_PY -c "
+import pycolmap, importlib.metadata
+assert hasattr(pycolmap, 'Reconstruction')
+print('  ✅ .venv_ba: pycolmap', importlib.metadata.version('pycolmap'), '(Reconstruction/BA — gói COLMAP thật)')
+" || die ".venv_ba pycolmap vẫn không dùng được — dán output pip index versions pycolmap"
 
 say "B2.1 refine STAGE-1 (pose+points, intrinsics cố định) — ĐỌC KỸ dòng in ra"
 # Mặc định CHỈ stage 1 (không --refine_intrinsics): cô lập đúng giả thuyết "pose nhiễu",
 # tránh rủi ro phân kỳ đã gặp khi refine intrinsics+pose cùng lúc (xem DOC3 §2.3).
-if [ -s "workspace_ref/$S/sparse/0/images.bin" ]; then
-  echo "  ⏩ workspace_ref/$S đã có"
+if [ -s "workspace_ref/$S/sparse/0/images.bin" ] && [ -f "workspace_ref/$S/REFINE_OK" ]; then
+  echo "  ⏩ workspace_ref/$S đã có (marker REFINE_OK — kết quả BA hội tụ)"
 else
+  if [ -d "workspace_ref/$S" ]; then
+    echo "  ⚠ workspace_ref/$S tồn tại nhưng THIẾU marker REFINE_OK → rác từ lần BA fail/phân kỳ, XOÁ làm lại"
+    rm -rf "workspace_ref/$S"
+  fi
   rm -f /tmp/b2_refine.txt
-  $PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref/$S" 2>&1 \
+  $BA_PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref/$S" 2>&1 \
     | tee /tmp/b2_refine.txt || die "pose_refine fail — dán /tmp/b2_refine.txt"
 fi
 # đọc k1 THẲNG từ cameras.bin của workspace_ref (không phụ thuộc /tmp/b2_refine.txt —
@@ -87,6 +106,9 @@ with open("workspace_ref/HCM0204/sparse/0/cameras.bin","rb") as f:
         print(repr(struct.unpack("<dddddddd", f.read(64))[4]))
 EOF
 )
+# sanity: k1 gốc HCM0204 ~ +0.01; BA phân kỳ từng ghi ra k1=0.314 → chặn giá trị vô lý
+$PY -c "import sys; k=float('$K1R'); sys.exit(0 if abs(k) < 0.2 else 1)" \
+  || die "k1=$K1R VÔ LÝ (gốc ~+0.01, |k1|≥0.2 = rác BA phân kỳ) → rm -rf workspace_ref/$S rồi chạy lại"
 echo "  render B2 sẽ dùng: k1=$K1R (stage 1 → SIMPLE_RADIAL giữ nguyên, k2/tangential=0)"
 
 say "B2.2 train 12M trên workspace REFINED (~90ph)"
@@ -109,8 +131,11 @@ score renders/${S}__ref12M "B2"
 # ===================== B2X (tuỳ chọn, RUN_B2X=1) — STAGE-2 INTRINSICS =====================
 if [ "${RUN_B2X:-0}" = "1" ]; then
   say "B2X. refine STAGE-2 (OPENCV intrinsics, pose khoá) + train + score (~100ph)"
-  if ! [ -s "workspace_ref2/$S/sparse/0/images.bin" ]; then
-    $PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref2/$S" \
+  if [ -s "workspace_ref2/$S/sparse/0/images.bin" ] && [ -f "workspace_ref2/$S/REFINE_OK" ]; then
+    echo "  ⏩ workspace_ref2/$S đã có (marker REFINE_OK)"
+  else
+    [ -d "workspace_ref2/$S" ] && { echo "  ⚠ workspace_ref2/$S thiếu marker → xoá làm lại"; rm -rf "workspace_ref2/$S"; }
+    $BA_PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref2/$S" \
       --refine_intrinsics 2>&1 | tee /tmp/b2x_refine.txt || die "pose_refine stage2 fail"
   fi
   if ! [ -s "results/${S}__ref2_12M/ckpts/ckpt_29999_rank0.pt" ]; then

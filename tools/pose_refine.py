@@ -63,10 +63,11 @@ def main():
     import pycolmap
     if not hasattr(pycolmap, "Reconstruction"):
         sys.exit(
-            "❌ Module 'pycolmap' đã import nhưng KHÔNG có Reconstruction — đây là gói "
-            "GIẢ/TRÙNG TÊN (đã gặp: 'pycolmap 0.0.1' rỗng), không phải thư viện SfM thật. "
-            "Sửa: pip uninstall -y pycolmap && "
-            "pip install --no-cache-dir --index-url https://pypi.org/simple pycolmap==4.1.0"
+            "❌ Module 'pycolmap' import được nhưng KHÔNG có Reconstruction — bạn đang import "
+            "pycolmap của rmbrualla (bản gsplat cần cho SceneManager, TRÙNG TÊN với pycolmap "
+            "COLMAP chính thức). ĐỪNG cài 4.1.0 đè vào .venv (sẽ phá train gsplat)! "
+            "Chạy script này bằng venv riêng: .venv_ba/bin/python tools/pose_refine.py ... "
+            "(GATE_B.sh tự tạo .venv_ba)."
         )
     try:
         ver = pycolmap.__version__
@@ -169,7 +170,10 @@ def main():
         else:
             print(f"REFINED_INTRINSICS cam{cam_id}: fx={p[0]:.2f} fy={p[1]:.2f} cx={p[2]:.2f} cy={p[3]:.2f} "
                   f"k1={p[4]:+.6f} k2={p[5]:+.6f} p1={p[6]:+.6f} p2={p[7]:+.6f}")
-    print(f"✓ {out_ws}")
+    # Marker "kết quả này đã qua MỌI check hội tụ" — GATE_B chỉ tin workspace có file này;
+    # thiếu marker = run fail giữa chừng / phân kỳ → GATE_B tự xoá làm lại.
+    (out_ws / "REFINE_OK").write_text(f"stage2={a.refine_intrinsics}\n")
+    print(f"✓ {out_ws} (+ marker REFINE_OK)")
 
 
 if __name__ == "__main__":
