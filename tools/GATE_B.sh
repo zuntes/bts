@@ -28,12 +28,12 @@ if ! [ -s "results/${S}__tmask12M/ckpts/ckpt_29999_rank0.pt" ]; then
     --result-dir "$PWD/results/${S}__tmask12M" --max-steps 30000 --test-every 999999 \
     --disable-viewer --antialiased --with-ut --with-eval3d --raw-distortion \
     --strategy.cap-max 12000000 --eval-steps 30000 --save-steps 30000 \
-    2>&1 | tee /tmp/b3_train.log | tail -2 || die "train tmask"
+    2>&1 | tee /tmp/b3_train.log || die "train tmask"
   rm -f results/${S}__tmask12M/ckpts/ckpt_14999_rank0.pt; rm -rf results/${S}__tmask12M/videos
 fi
 $PY tools/render_test_poses.py --ckpt "results/${S}__tmask12M/ckpts/ckpt_29999_rank0.pt" \
   --csv "$CSV" --out "renders/${S}__tmask12M" --data_dir "workspace_raw/$S" \
-  --antialiased --with_ut --radial_k1 $K1 2>&1 | tail -1
+  --antialiased --with_ut --radial_k1 $K1 2>&1 | tee /tmp/b3_render.log
 score renders/${S}__tmask12M "B3-tmask12M"
 echo "  MỐC plain12M = 0.75587 → Δ ≥ +0.002 thì BẬT mask cho production"
 

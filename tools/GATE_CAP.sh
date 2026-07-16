@@ -39,14 +39,14 @@ for CAP in 8000000 12000000; do
       --result-dir "$PWD/results/${SCENE}__${TAG}" \
       --max-steps 30000 --test-every 999999 --disable-viewer --antialiased \
       --with-ut --with-eval3d --raw-distortion \
-      --strategy.cap-max $CAP --eval-steps 30000 --save-steps 30000 2>&1 | tail -8 \
+      --strategy.cap-max $CAP --eval-steps 30000 --save-steps 30000 2>&1 | tee /tmp/gc_train.log \
       || { echo "  ❌ train $TAG thất bại (OOM? xem trên)"; continue; }
   fi
   say "RENDER + SCORE $TAG"
   .venv/bin/python tools/render_test_poses.py \
     --ckpt "results/${SCENE}__${TAG}/ckpts/ckpt_29999_rank0.pt" --csv "$CSV" \
     --out "renders/${SCENE}__${TAG}" --data_dir "workspace_raw/$SCENE" \
-    --antialiased --with_ut --radial_k1 "$K1" 2>&1 | tail -2
+    --antialiased --with_ut --radial_k1 "$K1" 2>&1 | tee /tmp/gc_render.log
   .venv/bin/python tools/score_local.py --pred_dir "renders/${SCENE}__${TAG}" --gt_dir "$GT" \
     2>&1 | grep -aE "n=|★" | sed "s/^/  [$TAG] /"
   rm -f "results/${SCENE}__${TAG}/ckpts/ckpt_14999_rank0.pt"

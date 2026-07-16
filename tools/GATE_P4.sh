@@ -52,7 +52,7 @@ echo; echo "===== 2. RENDER (KHÔNG áp grid → canonical) + SCORE ====="
 .venv/bin/python tools/render_test_poses.py \
   --ckpt "results/${SCENE}__${TAG}/ckpts/ckpt_29999_rank0.pt" --csv "$CSV" \
   --out "renders/${SCENE}__${TAG}" --data_dir "workspace_raw/$SCENE" \
-  --antialiased --with_ut --radial_k1 "$K1" 2>&1 | tail -2
+  --antialiased --with_ut --radial_k1 "$K1" 2>&1 | tee /tmp/p4_render.log
 .venv/bin/python tools/score_local.py --pred_dir "renders/${SCENE}__${TAG}" --gt_dir "$GT" \
   2>&1 | tee /tmp/p4_score.txt | grep -aE "n=|★"
 V=$(grep -aoE "Score_BTC\[[^]]*\] = [0-9.]+" /tmp/p4_score.txt | grep -oE "[0-9]+\.[0-9]+" | tail -1)

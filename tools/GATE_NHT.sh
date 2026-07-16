@@ -76,7 +76,7 @@ else
   ( cd ~/3dgrut && PATH=$HOME/3dgrut/.venv/bin:$PATH "$NHT_PY" train.py \
       --config-name apps/colmap_3dgut_mcmc_nht.yaml \
       path=data/$SCENE out_dir=runs experiment_name=$RUN \
-      n_iterations=30000 strategy.add.max_n_gaussians=$CAP 2>&1 | tail -25 ) \
+      n_iterations=30000 strategy.add.max_n_gaussians=$CAP 2>&1 | tee /tmp/gn_train.log ) \
     || die "train NHT thất bại — dán 25 dòng trên"
 fi
 CKPT=$(ls -t ~/3dgrut/runs/$RUN/*/ckpt_last.pt 2>/dev/null | head -1)
@@ -106,7 +106,7 @@ say "4. Dựng eval workspace (60 competition poses, transform bằng T train)"
 say "5. Render 60 competition poses bằng model NHT"
 rm -rf ~/3dgrut/runs/gate_comp
 ( cd ~/3dgrut && PATH=$HOME/3dgrut/.venv/bin:$PATH "$NHT_PY" render_comp.py \
-    "$CKPT" data/${SCENE}_comp runs/gate_comp 2>&1 | tail -12 ) \
+    "$CKPT" data/${SCENE}_comp runs/gate_comp 2>&1 | tee /tmp/gn_render.log ) \
   || die "render_comp thất bại"
 RD=$(ls -d ~/3dgrut/runs/gate_comp/*/*/ 2>/dev/null | head -1)
 N_R=$(ls "$RD/ours_30000/renders"/*.png 2>/dev/null | wc -l)

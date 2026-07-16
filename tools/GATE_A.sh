@@ -25,14 +25,14 @@ train12(){ # $1=seed $2=result_tag
     --result-dir "$PWD/results/${S}__$2" --max-steps 30000 --test-every 999999 \
     --disable-viewer --antialiased --with-ut --with-eval3d --raw-distortion \
     --strategy.cap-max ${3:-12000000} --eval-steps 30000 --save-steps 30000 \
-    --global-seed $1 2>&1 | tee /tmp/ga_train.log | tail -2 || die "train $2"
+    --global-seed $1 2>&1 | tee /tmp/ga_train.log || die "train $2"
   rm -f "results/${S}__$2/ckpts/ckpt_14999_rank0.pt"; rm -rf "results/${S}__$2/videos"
 }
 rend(){ # $1=ckpt_tag $2=render_tag
   [ "$(ls renders/${S}__$2 2>/dev/null | wc -l)" -ge 60 ] && { echo "  ⏩ $2 render có"; return; }
   $PY tools/render_test_poses.py --ckpt "results/${S}__$1/ckpts/ckpt_29999_rank0.pt" \
     --csv "$CSV" --out "renders/${S}__$2" --data_dir "workspace_raw/$S" \
-    --antialiased --with_ut --radial_k1 $K1 2>&1 | tail -1
+    --antialiased --with_ut --radial_k1 $K1 2>&1 | tee -a /tmp/ga_render.log
 }
 
 say "0. tiên quyết"
@@ -66,13 +66,13 @@ if ! [ -s results/${S}__ft12/ckpt_ft.pt ]; then
   $PY tools/finetune_lpips.py --workspace "workspace_raw/$S" \
     --ckpt "results/${S}__cap12M/ckpts/ckpt_29999_rank0.pt" \
     --out results/${S}__ft12/ckpt_ft.pt --lambda_lpips 0.05 --steps 3000 \
-    --antialiased --with_ut --lpips_patch 512 --test_csv "$CSV" 2>&1 | tail -3 \
+    --antialiased --with_ut --lpips_patch 512 --test_csv "$CSV" 2>&1 | tee /tmp/ga_ft.log \
     || echo "  ❌ ft512 fail (OOM? dán log)"
 fi
 if [ -s results/${S}__ft12/ckpt_ft.pt ]; then
   [ "$(ls renders/${S}__ft12 2>/dev/null | wc -l)" -ge 60 ] || \
   $PY tools/render_test_poses.py --ckpt results/${S}__ft12/ckpt_ft.pt --csv "$CSV" \
-    --out renders/${S}__ft12 --data_dir "workspace_raw/$S" --antialiased --with_ut --radial_k1 $K1 2>&1 | tail -1
+    --out renders/${S}__ft12 --data_dir "workspace_raw/$S" --antialiased --with_ut --radial_k1 $K1 2>&1 | tee -a /tmp/ga_render.log
   score renders/${S}__ft12 "A3-ft512@12M"
 fi
 

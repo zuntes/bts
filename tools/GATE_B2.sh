@@ -36,7 +36,7 @@ if ! [ -s "results/${S}__ref12M/ckpts/ckpt_29999_rank0.pt" ]; then
     --result-dir "$PWD/results/${S}__ref12M" --max-steps 30000 --test-every 999999 \
     --disable-viewer --antialiased --with-ut --with-eval3d --raw-distortion \
     --strategy.cap-max 12000000 --eval-steps 30000 --save-steps 30000 \
-    2>&1 | tee /tmp/b2_train.log | tail -2 || die "train ref"
+    2>&1 | tee /tmp/b2_train.log || die "train ref"
   rm -f results/${S}__ref12M/ckpts/ckpt_14999_rank0.pt; rm -rf results/${S}__ref12M/videos
 fi
 
@@ -44,7 +44,7 @@ say "3. render tại test poses GỐC (frame đã neo) + intrinsics refined + sc
 $PY tools/render_test_poses.py --ckpt "results/${S}__ref12M/ckpts/ckpt_29999_rank0.pt" \
   --csv "$CSV" --out "renders/${S}__ref12M" --data_dir "workspace_ref/$S" \
   --antialiased --with_ut --radial_k1 "$K1" --radial_k2 "$K2" --tangential "$P1" "$P2" \
-  2>&1 | tail -1
+  2>&1 | tee /tmp/b2_render.log
 $PY tools/score_local.py --pred_dir "renders/${S}__ref12M" --gt_dir "$GT" 2>&1 | grep -aE "n=|★" | sed 's/^/  [B2] /'
 
 echo
