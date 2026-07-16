@@ -10,14 +10,14 @@
 # Bằng chứng còn tín hiệu: L16-XL ăn +0.004 CHỈ trên scene lệch exposure.
 # P4 trị ở gốc (train) thay vì vá ở hậu xử lý (L16 vẫn chồng lên được sau).
 #
-# A/B: standard@5M (mốc 0.74727) vs standard@5M + bilateral grid. Cùng scene/cap/seed.
+# A/B: standard@12M (mốc 0.75587 — cap production) vs standard@12M + bilateral grid.
 # Chạy: bash tools/GATE_P4.sh 2>&1 | tee /tmp/gate_p4.txt      (~2-3h, tmux)
 # ============================================================================
 set -uo pipefail
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-SCENE=HCM0204; CAP=5000000; BASE=0.74727
+SCENE=HCM0204; CAP=12000000; BASE=0.75587   # cap production (GATE_CAP) — A/B phải ở ĐÚNG cap sẽ dùng thật
 CSV="VAI_NVS_DATA/phase1/public_set/$SCENE/test/test_poses.csv"
 GT="VAI_NVS_DATA/phase1/public_set/$SCENE/test/images"
 K1=$(.venv/bin/python - "$SCENE" <<'EOF'
@@ -34,8 +34,8 @@ echo "===== 0. tiên quyết ====="
 FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ "$FREE" -lt 15 ] && die "đĩa ${FREE}GB<15"
 echo "  ✅ ok · đĩa ${FREE}GB · k1=$K1"
 
-TAG=bilagrid5M
-echo; echo "===== 1. TRAIN standard@5M + BILATERAL GRID ====="
+TAG=bilagrid12M
+echo; echo "===== 1. TRAIN standard@12M + BILATERAL GRID (~90 phút) ====="
 if [ -s "results/${SCENE}__${TAG}/ckpts/ckpt_29999_rank0.pt" ]; then echo "  ⏩ đã có"; else
   .venv/bin/python gsplat/examples/simple_trainer.py mcmc \
     --data-dir "workspace_raw/$SCENE" --data-factor 1 \
@@ -61,8 +61,8 @@ echo
 echo "########################################################################"
 echo "#  VERDICT — CỔNG P4 (bilateral grid)"
 echo "########################################################################"
-echo "  standard@5M + bilagrid : v50 = ${V:-ERR}"
-echo "  standard@5M (mốc)      : v50 = $BASE"
+echo "  standard@12M + bilagrid : v50 = ${V:-ERR}"
+echo "  standard@12M (mốc)      : v50 = $BASE"
 [ -n "$V" ] && .venv/bin/python -c "
 d=float('$V')-float('$BASE')
 print(f'  Δ = {d:+.5f}  ({d*100:+.2f} điểm BTC)')
