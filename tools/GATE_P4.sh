@@ -43,7 +43,7 @@ if [ -s "results/${SCENE}__${TAG}/ckpts/ckpt_29999_rank0.pt" ]; then echo "  ⏩
     --max-steps 30000 --test-every 999999 --disable-viewer --antialiased \
     --with-ut --with-eval3d --raw-distortion \
     --strategy.cap-max $CAP --eval-steps 30000 --save-steps 30000 \
-    --use-bilateral-grid 2>&1 | tail -10 || die "train thất bại (flag --use-bilateral-grid sai tên? xem trên)"
+    --use-bilateral-grid 2>&1 | tee /tmp/p4_train.log || die "train thất bại (flag --use-bilateral-grid sai tên? xem /tmp/p4_train.log)"
 fi
 [ -s "results/${SCENE}__${TAG}/ckpts/ckpt_29999_rank0.pt" ] || die "không thấy ckpt"
 
