@@ -58,6 +58,15 @@ def main():
     rec = pycolmap.Reconstruction(str(in_ws / "sparse/0"))
     print(f"vào: {rec.num_images()} ảnh, {rec.num_points3D()} điểm")
 
+    # --- 0. Loại điểm 3D track suy biến (track.length() < 2 sau khi BTC gỡ 169/409 ảnh
+    #     làm nhiều track tụt còn 1 quan sát — vô nghĩa hình học, Ceres BA từ chối cứng).
+    degenerate = [pid for pid, p in rec.points3D.items() if p.track.length() < 2]
+    for pid in degenerate:
+        rec.delete_point3D(pid)
+    if degenerate:
+        print(f"  loại {len(degenerate)} điểm track<2 (còn {rec.num_points3D()} điểm) — "
+              f"hệ quả của việc BTC gỡ 169/409 ảnh khỏi tập train")
+
     # --- 1. nâng camera model SIMPLE_RADIAL(f,cx,cy,k1) → OPENCV(fx,fy,cx,cy,k1,k2,p1,p2)
     #     (API pycolmap đổi giữa version — dò nhiều cách lấy tên/set model, in rõ cách nào ăn)
     for cam_id, cam in rec.cameras.items():
