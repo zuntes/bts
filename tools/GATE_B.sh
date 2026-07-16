@@ -52,16 +52,20 @@ say "B2.0 HAI gói 'pycolmap' TRÙNG TÊN → tách 2 venv (bài học 16/07, DO
 # Đã trả giá: force-reinstall 4.1.0 vào .venv đè mất SceneManager → MỌI train gsplat gãy.
 # → .venv giữ bản rmbrualla; BA chạy bằng venv riêng .venv_ba.
 
-# 0a. .venv phải còn SceneManager (tự chữa nếu đã lỡ bị 4.1.0 đè)
+# 0a. .venv phải import được SceneManager (tự chữa 2 bệnh đã gặp 16/07):
+#   bệnh 1: pycolmap 4.1.0 đè mất bản rmbrualla → ImportError SceneManager
+#   bệnh 2: 4.1.0 kéo numpy 1.26.4→2.2.6; code rmbrualla có np.uint64(-1) →
+#           OverflowError NGAY LÚC IMPORT dưới numpy 2.x (NEP 50) — đã tái hiện local
 if ! $PY -c "from pycolmap import SceneManager" 2>/dev/null; then
-  echo "  ⚠ .venv mất SceneManager (bị pycolmap 4.1.0 đè) → cài lại bản rmbrualla cho gsplat..."
-  $PY -m pip install -q --force-reinstall --no-cache-dir \
+  echo "  ⚠ .venv không import được SceneManager → khôi phục numpy 1.26.4 + pycolmap rmbrualla..."
+  $PY -m pip install -q --no-cache-dir "numpy==1.26.4" || die "pin numpy==1.26.4 fail"
+  $PY -m pip install -q --force-reinstall --no-deps --no-cache-dir \
     "git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b32125e" \
     || die "cài lại pycolmap rmbrualla fail — dán output pip"
 fi
-$PY -c "from pycolmap import SceneManager" 2>/dev/null \
-  || die ".venv vẫn thiếu SceneManager — train gsplat sẽ gãy, DỪNG"
-echo "  ✅ .venv: pycolmap rmbrualla (SceneManager) — train gsplat OK"
+# verify KHÔNG nuốt stderr — nếu vẫn fail thì traceback nằm ngay phía trên
+$PY -c "from pycolmap import SceneManager; import numpy; print('  ✅ .venv: pycolmap rmbrualla (SceneManager) + numpy', numpy.__version__, '— train gsplat OK')" \
+  || die ".venv vẫn không import được SceneManager — DÁN TRACEBACK PHÍA TRÊN cho Claude"
 
 # 0b. venv riêng .venv_ba cho pycolmap chính thức (KHÔNG BAO GIỜ cài 4.1.0 vào .venv)
 BA_PY=.venv_ba/bin/python
