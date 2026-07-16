@@ -71,6 +71,8 @@ def main():
                     help="[EXPERIMENTAL] render bằng Unscented Transform (3DGUT) cho model "
                          "train với --with_ut --with_eval3d; kết hợp --radial_k1 để render "
                          "TRỰC TIẾP với distortion (thay thế --redistort_k1 warp)")
+    ap.add_argument("--radial_k2", type=float, default=0.0, help="B2: k2 của model OPENCV refined")
+    ap.add_argument("--tangential", type=float, nargs=2, default=None, help="B2: p1 p2 OPENCV refined")
     ap.add_argument("--radial_k1", type=float, default=None,
                     help="k1 SIMPLE_RADIAL cho render 3DGUT (chỉ dùng cùng --with_ut)")
     ap.add_argument("--antialiased", action="store_true",
@@ -135,7 +137,10 @@ def main():
             ut_kwargs = dict(with_ut=True, with_eval3d=True, packed=False)
             if args.radial_k1 is not None:
                 ut_kwargs["radial_coeffs"] = torch.tensor(
-                    [[args.radial_k1, 0, 0, 0, 0, 0]], device=device).float()
+                    [[args.radial_k1, args.radial_k2, 0, 0, 0, 0]], device=device).float()
+                if args.tangential is not None:
+                    ut_kwargs["tangential_coeffs"] = torch.tensor(
+                        [list(args.tangential)], device=device).float()
         render, _, _ = rasterization(
             means, quats, scales, opacities, colors,
             torch.from_numpy(viewmat).float()[None].to(device),

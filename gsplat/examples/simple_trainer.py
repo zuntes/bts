@@ -763,6 +763,13 @@ class Runner:
                 info=info,
             )
 
+            # BTS B3: transient masking — pixel động (xe/người) nhận supervision mâu thuẫn
+            # giữa các frame → thay GT tại đó bằng render.detach() → gradient = 0 cho CẢ
+            # L1 lẫn SSIM, model không bị ép khớp vật thể chuyển động.
+            if "tmask" in data:
+                _tm = data["tmask"].to(device)  # [B,H,W] True = transient
+                pixels = torch.where(_tm[..., None], colors.detach(), pixels)
+
             # loss
             l1loss = F.l1_loss(colors, pixels)
             ssimloss = 1.0 - fused_ssim(

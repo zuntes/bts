@@ -387,6 +387,17 @@ class Dataset:
     def __getitem__(self, item: int) -> Dict[str, Any]:
         index = self.indices[item]
         image = imageio.imread(self.parser.image_paths[index])[..., :3]
+        # BTS B3: transient mask (True = pixel TRANSIENT, loại khỏi loss).
+        # File: <data_dir>/transient_masks/<image_stem>.png (255 = transient).
+        _ip = self.parser.image_paths[index]
+        _tm = os.path.join(os.path.dirname(os.path.dirname(_ip)), "transient_masks",
+                           os.path.splitext(os.path.basename(_ip))[0] + ".png")
+        tmask = None
+        if os.path.exists(_tm):
+            tmask = imageio.imread(_tm)
+            if tmask.ndim == 3:
+                tmask = tmask[..., 0]
+            tmask = tmask > 127
         camera_id = self.parser.camera_ids[index]
         K = self.parser.Ks_dict[camera_id].copy()  # undistorted K
         params = self.parser.params_dict[camera_id]
@@ -420,6 +431,14 @@ class Dataset:
         }
         if mask is not None:
             data["mask"] = torch.from_numpy(mask).bool()
+        # BTS B3: đưa transient mask vào batch (resize nếu ảnh đã bị downscale)
+        if tmask is not None:
+            if tmask.shape[:2] != image.shape[:2]:
+                import cv2 as _cv2
+                tmask = _cv2.resize(tmask.astype(np.uint8),
+                                    (image.shape[1], image.shape[0]),
+                                    interpolation=_cv2.INTER_NEAREST) > 0
+            data["tmask"] = torch.from_numpy(tmask).bool()
 
         if self.load_depths:
             # projected points to image plane to get depths

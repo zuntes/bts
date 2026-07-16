@@ -52,6 +52,41 @@ class UNetSmall(nn.Module):
         return (x + self.head(d1)).clamp(0, 1)
 
 
+class UNetVGG(nn.Module):
+    """B1 — U-Net với encoder VGG16 PRETRAINED (ImageNet): mang tri thức ngoài vào
+    đúng chỗ L16 bão hoà (đã đo: net to hơn from-scratch chỉ +0.00007 — nút thắt là
+    THÔNG TIN chứ không phải capacity). Decoder nhẹ + residual, head khởi tạo zero."""
+
+    def __init__(self):
+        super().__init__()
+        from torchvision.models import vgg16, VGG16_Weights
+        feats = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features
+        self.e1 = feats[:4]     # 64ch  (relu1_2)  full-res
+        self.e2 = feats[4:9]    # 128ch (relu2_2)  1/2
+        self.e3 = feats[9:16]   # 256ch (relu3_3)  1/4
+        def block(i, o):
+            return nn.Sequential(nn.Conv2d(i, o, 3, padding=1), nn.GELU(),
+                                 nn.Conv2d(o, o, 3, padding=1), nn.GELU())
+        self.d2 = block(256 + 128, 128)
+        self.d1 = block(128 + 64, 64)
+        self.head = nn.Conv2d(64, 3, 3, padding=1)
+        nn.init.zeros_(self.head.weight); nn.init.zeros_(self.head.bias)
+        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406])[None, :, None, None])
+        self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225])[None, :, None, None])
+
+    def forward(self, x):
+        z = (x - self.mean) / self.std
+        e1 = self.e1(z); e2 = self.e2(e1); e3 = self.e3(e2)
+        up = lambda t: F.interpolate(t, scale_factor=2, mode="bilinear", align_corners=False)
+        d2 = self.d2(torch.cat([up(e3), e2], 1))
+        d1 = self.d1(torch.cat([up(d2), e1], 1))
+        return (x + self.head(d1)).clamp(0, 1)
+
+
+def build_net(arch, ch_mult=1):
+    return UNetVGG() if arch == "vgg" else UNetSmall(ch_mult=ch_mult)
+
+
 def render_train_views(ws, ckpt_path, out_dir, with_ut, radial_k1, antialiased=True):
     """Render mọi train view của workspace từ ckpt (skip nếu đã đủ)."""
     from colmap_io import read_cameras_bin, read_images_bin, read_points3D_bin
@@ -122,8 +157,14 @@ def cmd_train(a):
     tr, va = pairs[:-n_val], pairs[-n_val:]
     print(f"L16: {len(tr)} train / {len(va)} val pairs")
 
-    net = UNetSmall(ch_mult=a.ch_mult).to(dev)
-    opt = torch.optim.AdamW(net.parameters(), lr=2e-4, weight_decay=1e-5)
+    net = build_net(a.arch, a.ch_mult).to(dev)
+    if a.arch == "vgg":  # encoder pretrained: lr thấp hơn 10× để không phá prior
+        enc = [p for n, p in net.named_parameters() if n.startswith("e")]
+        dec = [p for n, p in net.named_parameters() if not n.startswith("e")]
+        opt = torch.optim.AdamW([{"params": enc, "lr": 2e-5}, {"params": dec, "lr": 2e-4}],
+                                weight_decay=1e-5)
+    else:
+        opt = torch.optim.AdamW(net.parameters(), lr=2e-4, weight_decay=1e-5)
     lp = lpips.LPIPS(net="vgg").to(dev).eval()
     for p in lp.parameters():
         p.requires_grad_(False)
@@ -182,14 +223,14 @@ def cmd_train(a):
                   f"SSIM={sc[2]:.4f} LPIPS={sc[3]:.4f}{marker}")
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     torch.save({"state": best[1], "base_v50": base[0], "best_v50": best[0],
-                "ch_mult": a.ch_mult}, a.out)
+                "ch_mult": a.ch_mult, "arch": a.arch}, a.out)
     print(f"VAL-GAIN {best[0] - base[0]:+.5f} → {a.out}")
 
 
 def cmd_apply(a):
     dev = "cuda"
     ck = torch.load(a.net, map_location=dev, weights_only=True)
-    net = UNetSmall(ch_mult=ck.get("ch_mult", 1)).to(dev).eval()
+    net = build_net(ck.get("arch", "unet"), ck.get("ch_mult", 1)).to(dev).eval()
     net.load_state_dict(ck["state"])
     out = Path(a.out_dir); out.mkdir(parents=True, exist_ok=True)
     files = sorted(Path(a.in_dir).glob("*.png"))
@@ -219,6 +260,8 @@ if __name__ == "__main__":
     t.add_argument("--patch", type=int, default=256)
     t.add_argument("--batch", type=int, default=4)
     t.add_argument("--ch_mult", type=int, default=1, help="nhân độ rộng U-Net (G3: 2)")
+    t.add_argument("--arch", choices=["unet", "vgg"], default="unet",
+                   help="vgg = B1 encoder VGG16 pretrained (tri thức ngoài)")
     p = sub.add_parser("apply")
     p.add_argument("--net", required=True)
     p.add_argument("--in_dir", required=True)
