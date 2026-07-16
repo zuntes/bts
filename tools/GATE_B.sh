@@ -41,17 +41,24 @@ else
 fi
 
 # ============================== B2 — POSE REFINE ==============================
-say "B2.0 pycolmap"
-$PY -c "import pycolmap" 2>/dev/null || { echo "  → cài pycolmap..."; $PY -m pip install -q pycolmap || die "pip pycolmap fail"; }
+say "B2.0 pycolmap (verify KHÔNG PHẢI gói rác/trùng tên — đã dính 'pycolmap 0.0.1' không có Reconstruction)"
+need_install=1
+if $PY -c "import pycolmap; assert hasattr(pycolmap,'Reconstruction')" 2>/dev/null; then need_install=0; fi
+if [ "$need_install" = 1 ]; then
+  echo "  → (chưa có / là gói giả) cài pycolmap==4.1.0 từ PyPI chính thức (đã verify local đủ Reconstruction/Sim3d/BA)..."
+  $PY -m pip install -q --force-reinstall --no-cache-dir --index-url https://pypi.org/simple "pycolmap==4.1.0" \
+    || die "pip pycolmap fail — có thể server dùng mirror nội bộ chặn pypi.org, báo mình"
+fi
 $PY -c "
 import pycolmap
+assert hasattr(pycolmap, 'Reconstruction'), 'VẪN LÀ GÓI GIẢ sau khi cài — kiểm pip config/mirror'
 try: v = pycolmap.__version__
 except AttributeError:
     import importlib.metadata
     try: v = importlib.metadata.version('pycolmap')
     except Exception: v = '?'
-print('  ✅ pycolmap', v)
-"
+print('  ✅ pycolmap', v, '(có Reconstruction — gói thật)')
+" || die "pycolmap vẫn không dùng được sau cài — dán output pip config list + pip index versions pycolmap"
 
 say "B2.1 refine (BA + neo gauge) — ĐỌC KỸ dòng in ra"
 if [ -s "workspace_ref/$S/sparse/0/images.bin" ]; then

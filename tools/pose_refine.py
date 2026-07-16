@@ -37,6 +37,13 @@ def main():
     ap.add_argument("--max_iters", type=int, default=100)
     a = ap.parse_args()
     import pycolmap
+    if not hasattr(pycolmap, "Reconstruction"):
+        sys.exit(
+            "❌ Module 'pycolmap' đã import nhưng KHÔNG có Reconstruction — đây là gói "
+            "GIẢ/TRÙNG TÊN (đã gặp: 'pycolmap 0.0.1' rỗng), không phải thư viện SfM thật. "
+            "Sửa: pip uninstall -y pycolmap && "
+            "pip install --no-cache-dir --index-url https://pypi.org/simple pycolmap==4.1.0"
+        )
     try:
         ver = pycolmap.__version__
     except AttributeError:
