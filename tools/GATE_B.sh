@@ -60,19 +60,18 @@ except AttributeError:
 print('  ✅ pycolmap', v, '(có Reconstruction — gói thật)')
 " || die "pycolmap vẫn không dùng được sau cài — dán output pip config list + pip index versions pycolmap"
 
-say "B2.1 refine (BA + neo gauge) — ĐỌC KỸ dòng in ra"
+say "B2.1 refine STAGE-1 (pose+points, intrinsics cố định) — ĐỌC KỸ dòng in ra"
+# Mặc định CHỈ stage 1 (không --refine_intrinsics): cô lập đúng giả thuyết "pose nhiễu",
+# tránh rủi ro phân kỳ đã gặp khi refine intrinsics+pose cùng lúc (xem DOC3 §2.3).
 if [ -s "workspace_ref/$S/sparse/0/images.bin" ]; then
   echo "  ⏩ workspace_ref/$S đã có"
 else
+  rm -f /tmp/b2_refine.txt
   $PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref/$S" 2>&1 \
     | tee /tmp/b2_refine.txt || die "pose_refine fail — dán /tmp/b2_refine.txt"
-  grep -q "⚠ drift lớn" /tmp/b2_refine.txt && die "gauge drift lớn — DỪNG, dán /tmp/b2_refine.txt"
 fi
-K1R=$(grep -oE "k1=[+-][0-9.]+" /tmp/b2_refine.txt 2>/dev/null | head -1 | cut -d= -f2)
-K2R=$(grep -oE "k2=[+-][0-9.]+" /tmp/b2_refine.txt 2>/dev/null | head -1 | cut -d= -f2)
-P1R=$(grep -oE "p1=[+-][0-9.]+" /tmp/b2_refine.txt 2>/dev/null | head -1 | cut -d= -f2)
-P2R=$(grep -oE "p2=[+-][0-9.]+" /tmp/b2_refine.txt 2>/dev/null | head -1 | cut -d= -f2)
-echo "  render B2 sẽ dùng: k1=$K1R k2=$K2R p1=$P1R p2=$P2R"
+K1R=$(grep -oE "k1=[+-][0-9.]+" /tmp/b2_refine.txt 2>/dev/null | tail -1 | cut -d= -f2)
+echo "  render B2 sẽ dùng: k1=$K1R (chỉ stage 1 → vẫn SIMPLE_RADIAL, k2/tangential=0)"
 
 say "B2.2 train 12M trên workspace REFINED (~90ph)"
 if ! [ -s "results/${S}__ref12M/ckpts/ckpt_29999_rank0.pt" ]; then
@@ -87,7 +86,7 @@ fi
 say "B2.3 render (test poses gốc, intrinsics refined) + score"
 $PY tools/render_test_poses.py --ckpt "results/${S}__ref12M/ckpts/ckpt_29999_rank0.pt" \
   --csv "$CSV" --out "renders/${S}__ref12M" --data_dir "workspace_ref/$S" \
-  --antialiased --with_ut --radial_k1 "$K1R" --radial_k2 "$K2R" --tangential "$P1R" "$P2R" \
+  --antialiased --with_ut --radial_k1 "$K1R" \
   2>&1 | tee /tmp/b2_render.log
 score renders/${S}__ref12M "B2"
 

@@ -1,18 +1,27 @@
 #!/usr/bin/env python3
-"""B2 — Refine pose/intrinsics GAUGE-LOCKED (docs DOC2 §3).
+"""B2 — Refine pose GAUGE-LOCKED, 2 GIAI ĐOẠN TÁCH BIỆT (docs DOC2 §3, DOC3 §2.3).
 
-Vấn đề: COLMAP của BTC dùng SIMPLE_RADIAL (1 tham số k1) — quá thô cho ống kính thật.
-Pose/intrinsics sai 0.5px = blur toàn cục = trần PSNR bị chặn bất kể train tốt cỡ nào.
+Bài học 16/07: refine pose+intrinsics(OPENCV 8-tham-số) CÙNG LÚC trong 1 BA từ cold-start
+làm bài toán thiếu ràng buộc → phân kỳ (reprojection error → 10^156, NO_CONVERGENCE).
+Sửa bằng tách 2 giai đoạn kiểu COLMAP chuẩn:
 
-Cách: nâng camera model → OPENCV (fx,fy,cx,cy,k1,k2,p1,p2), bundle-adjust lại
-(pose + intrinsics + points) bằng pycolmap, rồi NEO GAUGE: similarity (Umeyama) đưa
-camera centers refined về khớp frame GỐC → test poses (ở frame gốc) vẫn dùng được.
-Phần "sửa" còn lại là hiệu chỉnh PER-CAMERA phi-rigid — chính là thứ ta muốn giữ.
+  STAGE 1 (mặc định, luôn chạy): giữ NGUYÊN camera model SIMPLE_RADIAL, chỉ refine
+    pose (rig_from_world) + points3D — bài toán ràng buộc tốt, ổn định. Đây CHÍNH LÀ
+    bài test giả thuyết P1 "pose nhiễu" một cách sạch, tách biệt khỏi rủi ro camera model.
+  STAGE 2 (--refine_intrinsics, tuỳ chọn): SAU KHI stage 1 ổn, khoá pose lại
+    (refine_rig_from_world=False), nâng model lên OPENCV, chỉ refine focal+distortion
+    (KHÔNG refine principal point — dễ trôi, giữ cố định), poses không đổi nên không
+    cần neo gauge lại lần 2.
+
+Mỗi giai đoạn có sanity-check TRƯỚC khi dùng kết quả (isfinite + không phân kỳ) —
+dừng cứng thay vì âm thầm ghi ra workspace hỏng.
+
 (KHÁC pose-opt bị cấm: không đụng test poses, chỉ làm sạch SfM train — hợp lệ.)
 
 Dùng: python pose_refine.py --in_ws workspace_raw/HCM0204 --out_ws workspace_ref/HCM0204
+      [--refine_intrinsics]  (mặc định KHÔNG — chỉ stage 1)
 """
-import argparse, shutil, sys
+import argparse, math, sys
 from pathlib import Path
 import numpy as np
 
@@ -30,11 +39,26 @@ def umeyama(src, dst):
     return s, R, t
 
 
+def check_converged(tag, err0, err1):
+    """Chặn phân kỳ NGAY, trước khi dùng kết quả BA hỏng."""
+    if not math.isfinite(err1):
+        sys.exit(f"❌ [{tag}] BA phân kỳ: reprojection error = {err1} (không hữu hạn). DỪNG.")
+    if err1 > err0 * 5:
+        sys.exit(f"❌ [{tag}] BA phân kỳ: error {err0:.3f}→{err1:.3f}px (TĂNG {err1/err0:.1f}×, "
+                  f"đáng lẽ phải giảm). DỪNG — đừng dùng kết quả này.")
+    print(f"  [{tag}] reprojection error: {err0:.4f} → {err1:.4f} px "
+          f"({'giảm' if err1 < err0 else 'TĂNG'} {abs(1-err1/max(err0,1e-9))*100:.1f}%)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in_ws", required=True)
     ap.add_argument("--out_ws", required=True)
     ap.add_argument("--max_iters", type=int, default=100)
+    ap.add_argument("--refine_intrinsics", action="store_true",
+                    help="Stage 2: sau khi pose ổn, refine thêm focal+distortion (pose khoá cứng)")
+    ap.add_argument("--max_gauge_drift_frac", type=float, default=0.05,
+                    help="drift/scene tối đa chấp nhận được trước khi báo lỗi")
     a = ap.parse_args()
     import pycolmap
     if not hasattr(pycolmap, "Reconstruction"):
@@ -52,11 +76,11 @@ def main():
             ver = importlib.metadata.version("pycolmap")
         except Exception:
             ver = "?"
-    print(f"pycolmap {ver}")
+    print(f"pycolmap {ver}", flush=True)
 
     in_ws, out_ws = Path(a.in_ws), Path(a.out_ws)
     rec = pycolmap.Reconstruction(str(in_ws / "sparse/0"))
-    print(f"vào: {rec.num_images()} ảnh, {rec.num_points3D()} điểm")
+    print(f"vào: {rec.num_images()} ảnh, {rec.num_points3D()} điểm", flush=True)
 
     # --- 0. Loại điểm 3D track suy biến (track.length() < 2 sau khi BTC gỡ 169/409 ảnh
     #     làm nhiều track tụt còn 1 quan sát — vô nghĩa hình học, Ceres BA từ chối cứng).
@@ -65,79 +89,86 @@ def main():
         rec.delete_point3D(pid)
     if degenerate:
         print(f"  loại {len(degenerate)} điểm track<2 (còn {rec.num_points3D()} điểm) — "
-              f"hệ quả của việc BTC gỡ 169/409 ảnh khỏi tập train")
+              f"hệ quả của việc BTC gỡ 169/409 ảnh khỏi tập train", flush=True)
 
-    # --- 1. nâng camera model SIMPLE_RADIAL(f,cx,cy,k1) → OPENCV(fx,fy,cx,cy,k1,k2,p1,p2)
-    #     (API pycolmap đổi giữa version — dò nhiều cách lấy tên/set model, in rõ cách nào ăn)
-    for cam_id, cam in rec.cameras.items():
-        name = getattr(cam, "model_name", None)
-        if name is None:
-            m = cam.model
-            name = getattr(m, "name", None) or str(m)
-        if "SIMPLE_RADIAL" not in name:
-            print(f"  cam {cam_id}: model={name} (không phải SIMPLE_RADIAL, bỏ qua nâng cấp)")
-            continue
-        f, cx, cy, k1 = cam.params
-        new_params = [f, f, cx, cy, k1, 0.0, 0.0, 0.0]
-        ok = False
-        for setter in (
-            lambda: setattr(cam, "model", pycolmap.CameraModelId.OPENCV),
-            lambda: setattr(cam, "model_name", "OPENCV"),
-            lambda: setattr(cam, "model_id", pycolmap.CameraModelId.OPENCV.value),
-        ):
-            try:
-                setter(); ok = True; break
-            except Exception:
-                continue
-        if not ok:
-            sys.exit(f"❌ không set được camera.model=OPENCV trên cam {cam_id} — "
-                      f"pycolmap API lạ, dán 'python3 -c \"import pycolmap; help(pycolmap.Camera)\"' cho Claude")
-        cam.params = new_params
-        print(f"  cam {cam_id}: SIMPLE_RADIAL → OPENCV, giữ f={f:.1f} k1={k1:+.5f}")
-
-    # --- 2. lưu centers gốc (để neo gauge)
     img_ids = sorted(rec.images.keys())
     C0 = np.array([rec.images[i].projection_center() for i in img_ids])
 
-    # --- 3. bundle adjustment (pose + intrinsics + points)
-    err0 = rec.compute_mean_reprojection_error()
-    opt = pycolmap.BundleAdjustmentOptions()
-    for k in ("refine_focal_length", "refine_principal_point", "refine_extra_params",
-              "refine_extrinsics"):
-        if hasattr(opt, k): setattr(opt, k, True)
-    if hasattr(opt, "solver_options") and hasattr(opt.solver_options, "max_num_iterations"):
-        opt.solver_options.max_num_iterations = a.max_iters
-    pycolmap.bundle_adjustment(rec, opt)
-    err1 = rec.compute_mean_reprojection_error()
-    print(f"reprojection error: {err0:.4f} → {err1:.4f} px  (giảm {100*(1-err1/max(err0,1e-9)):.1f}%)")
+    def solver_opts(opt):
+        try:
+            opt.ceres.solver_options.max_num_iterations = a.max_iters
+            opt.ceres.solver_options.minimizer_progress_to_stdout = False
+        except AttributeError:
+            pass  # field name khác version — không chặn chạy, chỉ mất control iter count
+        return opt
 
-    # --- 4. NEO GAUGE: similarity refined→gốc trên camera centers
+    # ===================== STAGE 1 — CHỈ POSE + ĐIỂM, INTRINSICS CỐ ĐỊNH =====================
+    print("\n=== STAGE 1: refine pose + points3D (intrinsics CỐ ĐỊNH, model SIMPLE_RADIAL nguyên) ===",
+          flush=True)
+    err0 = rec.compute_mean_reprojection_error()
+    opt1 = pycolmap.BundleAdjustmentOptions()
+    opt1.refine_focal_length = False
+    opt1.refine_principal_point = False
+    opt1.refine_extra_params = False
+    opt1.refine_rig_from_world = True   # = pose, đây là thứ ta muốn sửa
+    opt1.refine_points3D = True
+    opt1 = solver_opts(opt1)
+    pycolmap.bundle_adjustment(rec, opt1)
+    err1 = rec.compute_mean_reprojection_error()
+    check_converged("stage1-pose", err0, err1)
+
+    # --- NEO GAUGE: similarity refined→gốc trên camera centers ---
     C1 = np.array([rec.images[i].projection_center() for i in img_ids])
     s, R, t = umeyama(C1, C0)
-    T = np.eye(4); T[:3, :3] = s * R; T[:3, 3] = t
-    sim = pycolmap.Sim3d(s, pycolmap.Rotation3d(R), t) if hasattr(pycolmap, "Sim3d") else None
-    if sim is not None and hasattr(rec, "transform"):
-        rec.transform(sim)
-    else:
-        sys.exit("❌ pycolmap thiếu Sim3d/transform — dán version cho Claude")
+    sim = pycolmap.Sim3d(s, pycolmap.Rotation3d(R), t)
+    rec.transform(sim)
     C2 = np.array([rec.images[i].projection_center() for i in img_ids])
     drift = np.linalg.norm(C2 - C0, axis=1)
     scene = np.linalg.norm(C0 - C0.mean(0), axis=1).mean()
-    print(f"gauge sau neo: residual per-camera p50={np.median(drift):.4f} p95={np.percentile(drift,95):.4f}"
-          f"  (scene scale ~{scene:.2f}; residual = hiệu chỉnh thật, PHẢI nhỏ hơn scene nhiều)")
-    if np.median(drift) > 0.05 * scene:
-        print("⚠ drift lớn bất thường — khả năng gauge không neo được, XEM KỸ trước khi train")
+    print(f"  gauge sau neo: residual p50={np.median(drift):.4f} p95={np.percentile(drift,95):.4f}"
+          f"  (scene scale ~{scene:.2f})", flush=True)
+    if np.median(drift) > a.max_gauge_drift_frac * scene:
+        sys.exit(f"❌ gauge drift lớn ({np.median(drift):.4f} > {a.max_gauge_drift_frac}×scene) — "
+                  f"neo KHÔNG đáng tin. DỪNG, đừng train trên workspace này.")
+    print(f"  ✅ Stage 1 ổn — drift {np.median(drift)/scene*100:.2f}% scene scale", flush=True)
 
-    # --- 5. ghi workspace mới (ảnh symlink, sparse mới)
+    # ===================== STAGE 2 (tuỳ chọn) — INTRINSICS, POSE KHOÁ =====================
+    if a.refine_intrinsics:
+        print("\n=== STAGE 2: nâng OPENCV, refine focal+distortion (pose ĐÃ KHOÁ) ===", flush=True)
+        for cam_id, cam in rec.cameras.items():
+            name = getattr(cam, "model_name", None) or getattr(cam.model, "name", None) or str(cam.model)
+            if "SIMPLE_RADIAL" not in name:
+                print(f"  cam {cam_id}: model={name} (bỏ qua nâng cấp)"); continue
+            f, cx, cy, k1 = cam.params
+            cam.model = pycolmap.CameraModelId.OPENCV
+            cam.params = [f, f, cx, cy, k1, 0.0, 0.0, 0.0]
+            print(f"  cam {cam_id}: SIMPLE_RADIAL → OPENCV, giữ f={f:.1f} k1={k1:+.5f}")
+
+        err0b = rec.compute_mean_reprojection_error()
+        opt2 = pycolmap.BundleAdjustmentOptions()
+        opt2.refine_focal_length = True
+        opt2.refine_principal_point = False   # CỐ Ý tắt — nguồn phân kỳ đã gặp, giữ cố định
+        opt2.refine_extra_params = True       # k1,k2,p1,p2
+        opt2.refine_rig_from_world = False    # pose ĐÃ KHOÁ — chỉ intrinsics
+        opt2.refine_points3D = True
+        opt2 = solver_opts(opt2)
+        pycolmap.bundle_adjustment(rec, opt2)
+        err1b = rec.compute_mean_reprojection_error()
+        check_converged("stage2-intrinsics", err0b, err1b)
+        print("  ✅ Stage 2 ổn (pose không đổi trong stage này → không cần neo gauge lại)", flush=True)
+
+    # --- ghi workspace mới ---
     (out_ws / "sparse/0").mkdir(parents=True, exist_ok=True)
     if not (out_ws / "images").exists():
         (out_ws / "images").symlink_to((in_ws / "images").resolve())
     rec.write(str(out_ws / "sparse/0"))
-    # in intrinsics mới để render dùng
     for cam_id, cam in rec.cameras.items():
         p = list(cam.params)
-        print(f"REFINED_INTRINSICS cam{cam_id}: fx={p[0]:.2f} fy={p[1]:.2f} cx={p[2]:.2f} cy={p[3]:.2f} "
-              f"k1={p[4]:+.6f} k2={p[5]:+.6f} p1={p[6]:+.6f} p2={p[7]:+.6f}")
+        if len(p) == 4:  # vẫn SIMPLE_RADIAL (chỉ chạy stage 1)
+            print(f"REFINED_INTRINSICS cam{cam_id}: f={p[0]:.2f} cx={p[1]:.2f} cy={p[2]:.2f} k1={p[3]:+.6f}")
+        else:
+            print(f"REFINED_INTRINSICS cam{cam_id}: fx={p[0]:.2f} fy={p[1]:.2f} cx={p[2]:.2f} cy={p[3]:.2f} "
+                  f"k1={p[4]:+.6f} k2={p[5]:+.6f} p1={p[6]:+.6f} p2={p[7]:+.6f}")
     print(f"✓ {out_ws}")
 
 
