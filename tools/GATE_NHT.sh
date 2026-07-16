@@ -11,7 +11,7 @@
 set -uo pipefail
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJ"
-export CUDA_VISIBLE_DEVICES=0            # GPU 1 bị VLLM chiếm
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}   # mặc định 0 (GPU1 hay bị VLLM chiếm), tôn trọng giá trị user đã export
 export CUDA_HOME=/usr/local/cuda-12.4
 export PATH=$CUDA_HOME/bin:$HOME/.local/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:${LD_LIBRARY_PATH:-}

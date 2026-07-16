@@ -8,7 +8,7 @@
 # ============================================================================
 set -uo pipefail
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 SCENE=HCM0204
 CSV="VAI_NVS_DATA/phase1/public_set/$SCENE/test/test_poses.csv"

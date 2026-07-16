@@ -15,7 +15,7 @@
 # ============================================================================
 set -uo pipefail
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 SCENE=HCM0204; CAP=12000000; BASE=0.75587   # cap production (GATE_CAP) — A/B phải ở ĐÚNG cap sẽ dùng thật
 CSV="VAI_NVS_DATA/phase1/public_set/$SCENE/test/test_poses.csv"

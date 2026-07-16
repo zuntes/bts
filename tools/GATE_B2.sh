@@ -7,7 +7,7 @@
 # ============================================================================
 set -uo pipefail
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
-export CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY=.venv/bin/python
 S=HCM0204
 CSV="VAI_NVS_DATA/phase1/public_set/$S/test/test_poses.csv"
