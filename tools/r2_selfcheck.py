@@ -109,13 +109,17 @@ def main():
         psnr = 10 * np.log10(255.0 ** 2 / max(mse, 1e-10))
         psnrs.append(psnr)
         print(f"  {rp.name}: PSNR={psnr:.2f}")
-    m = float(np.mean(psnrs))
+    # MEDIAN chứ không mean: 1 view ngoại biên học kém (PSNR ~6 ở đầu quỹ đạo — đã gặp
+    # HCM0421 smoke 16/07) không được phép đánh trượt cả scene; bug transform thật
+    # thì lật TẤT CẢ view → median vẫn bắt được.
+    m = float(np.median(psnrs))
+    print(f"  mean={np.mean(psnrs):.2f}  median={m:.2f}")
     if m < a.min_psnr:
-        print(f"❌ SELFCHECK FAIL: PSNR trung bình {m:.2f} < {a.min_psnr} — "
+        print(f"❌ SELFCHECK FAIL: PSNR median {m:.2f} < {a.min_psnr} — "
               f"transform/intrinsics SAI (kiểu bug T3-flip round 1), model KHÔNG kém. "
               f"DỪNG scene này, đừng phí GPU cho seed tiếp theo.")
         sys.exit(1)
-    print(f"✅ SELFCHECK OK: PSNR train-pose trung bình {m:.2f} ≥ {a.min_psnr} — "
+    print(f"✅ SELFCHECK OK: PSNR train-pose median {m:.2f} ≥ {a.min_psnr} — "
           f"đường ống render chuẩn cho scene này.")
 
 

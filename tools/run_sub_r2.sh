@@ -75,7 +75,7 @@ train_render_seed(){   # $1=scene $2=seed $3=cap $4=branch(gut|classic)
 
   # SELFCHECK sau seed ĐẦU TIÊN của scene (round 2 không có GT — đây là lưới an toàn duy nhất)
   if [ "$seed" = "${SEEDS%% *}" ] && ! [ -f "$res/SELFCHECK_OK" ]; then
-    $PY tools/r2_selfcheck.py gen --ws "workspace_r2/$s" --n 3 --out "/tmp/r2_sc_${s}.csv" || die "selfcheck gen $s"
+    $PY tools/r2_selfcheck.py gen --ws "workspace_r2/$s" --n 5 --out "/tmp/r2_sc_${s}.csv" || die "selfcheck gen $s"
     rm -rf "/tmp/r2_sc_${s}_render"
     $PY tools/render_test_poses.py --ckpt "$res/ckpts/ckpt_29999_rank0.pt" \
       --csv "/tmp/r2_sc_${s}.csv" --out "/tmp/r2_sc_${s}_render" --data_dir "workspace_r2/$s" \
