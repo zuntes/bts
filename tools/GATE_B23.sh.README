@@ -1,0 +1,3 @@
+Đã bỏ chạy song song với GATE_A (tranh chấp compute không đáng, chỉ còn 1 GPU).
+Thứ tự lại: GATE_A xong trước → rồi GATE_B23.sh (B2 pose-refine + B3 transient-mask,
+tuần tự, không tranh chấp ai) → rồi GATE_B1.sh (restoration, cần renders/ens12 của A).
