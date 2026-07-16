@@ -17,7 +17,15 @@ die(){ echo "❌ $*"; exit 1; }
 
 say "0. pycolmap"
 $PY -c "import pycolmap" 2>/dev/null || { echo "  → cài pycolmap..."; $PY -m pip install -q pycolmap || die "pip pycolmap fail"; }
-$PY -c "import pycolmap; print('  ✅ pycolmap', pycolmap.__version__)"
+$PY -c "
+import pycolmap
+try: v = pycolmap.__version__
+except AttributeError:
+    import importlib.metadata
+    try: v = importlib.metadata.version('pycolmap')
+    except Exception: v = '?'
+print('  ✅ pycolmap', v)
+"
 
 say "1. refine (BA + neo gauge) — ĐỌC KỸ các dòng in ra"
 $PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref/$S" 2>&1 \

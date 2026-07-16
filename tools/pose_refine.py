@@ -37,20 +37,47 @@ def main():
     ap.add_argument("--max_iters", type=int, default=100)
     a = ap.parse_args()
     import pycolmap
-    print(f"pycolmap {pycolmap.__version__}")
+    try:
+        ver = pycolmap.__version__
+    except AttributeError:
+        import importlib.metadata
+        try:
+            ver = importlib.metadata.version("pycolmap")
+        except Exception:
+            ver = "?"
+    print(f"pycolmap {ver}")
 
     in_ws, out_ws = Path(a.in_ws), Path(a.out_ws)
     rec = pycolmap.Reconstruction(str(in_ws / "sparse/0"))
     print(f"vào: {rec.num_images()} ảnh, {rec.num_points3D()} điểm")
 
     # --- 1. nâng camera model SIMPLE_RADIAL(f,cx,cy,k1) → OPENCV(fx,fy,cx,cy,k1,k2,p1,p2)
+    #     (API pycolmap đổi giữa version — dò nhiều cách lấy tên/set model, in rõ cách nào ăn)
     for cam_id, cam in rec.cameras.items():
-        name = cam.model.name if hasattr(cam.model, "name") else str(cam.model)
-        if "SIMPLE_RADIAL" in name:
-            f, cx, cy, k1 = cam.params
-            cam.model = pycolmap.CameraModelId.OPENCV if hasattr(pycolmap, "CameraModelId") else "OPENCV"
-            cam.params = [f, f, cx, cy, k1, 0.0, 0.0, 0.0]
-            print(f"  cam {cam_id}: SIMPLE_RADIAL → OPENCV, giữ f={f:.1f} k1={k1:+.5f}")
+        name = getattr(cam, "model_name", None)
+        if name is None:
+            m = cam.model
+            name = getattr(m, "name", None) or str(m)
+        if "SIMPLE_RADIAL" not in name:
+            print(f"  cam {cam_id}: model={name} (không phải SIMPLE_RADIAL, bỏ qua nâng cấp)")
+            continue
+        f, cx, cy, k1 = cam.params
+        new_params = [f, f, cx, cy, k1, 0.0, 0.0, 0.0]
+        ok = False
+        for setter in (
+            lambda: setattr(cam, "model", pycolmap.CameraModelId.OPENCV),
+            lambda: setattr(cam, "model_name", "OPENCV"),
+            lambda: setattr(cam, "model_id", pycolmap.CameraModelId.OPENCV.value),
+        ):
+            try:
+                setter(); ok = True; break
+            except Exception:
+                continue
+        if not ok:
+            sys.exit(f"❌ không set được camera.model=OPENCV trên cam {cam_id} — "
+                      f"pycolmap API lạ, dán 'python3 -c \"import pycolmap; help(pycolmap.Camera)\"' cho Claude")
+        cam.params = new_params
+        print(f"  cam {cam_id}: SIMPLE_RADIAL → OPENCV, giữ f={f:.1f} k1={k1:+.5f}")
 
     # --- 2. lưu centers gốc (để neo gauge)
     img_ids = sorted(rec.images.keys())
