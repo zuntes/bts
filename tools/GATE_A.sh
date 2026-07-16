@@ -50,7 +50,7 @@ if ! [ -s results/${S}__l16xl12/net.pt ]; then
   $PY tools/enhance_net.py train --workspace "workspace_raw/$S" \
     --ckpt "results/${S}__cap12M/ckpts/ckpt_29999_rank0.pt" \
     --out results/${S}__l16xl12/net.pt --with_ut --radial_k1 $K1 \
-    --steps 8000 --ch_mult 2 --patch 320 2>&1 | grep -aE "VAL-GAIN|val BASE"
+    --steps 8000 --ch_mult 2 --patch 320 2>&1 | tee /tmp/ga_l16xl.log
 fi
 $PY tools/enhance_net.py apply --net results/${S}__l16xl12/net.pt \
   --in_dir renders/${S}__ens12 --out_dir renders/${S}__a1 >/dev/null
