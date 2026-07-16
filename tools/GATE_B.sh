@@ -25,6 +25,11 @@ echo "  ✅ ok · đĩa ${FREE}GB · GPU $CUDA_VISIBLE_DEVICES"
 # ============================== B1 — RESTORATION PRIOR ==============================
 say "B1. restoration-prior (encoder VGG16 pretrained) trên ens12 (~40ph)"
 if [ -d "renders/${S}__ens12" ]; then
+  # tái dùng renders_train của A1 (cùng ckpt cap12M) — đỡ re-render 240 view (~10-15ph)
+  if [ -d "results/${S}__l16xl12/renders_train" ] && ! [ -e "results/${S}__b1vgg/renders_train" ]; then
+    mkdir -p "results/${S}__b1vgg"
+    ln -s "$PWD/results/${S}__l16xl12/renders_train" "results/${S}__b1vgg/renders_train"
+  fi
   if ! [ -s results/${S}__b1vgg/net.pt ]; then
     $PY tools/enhance_net.py train --workspace "workspace_raw/$S" \
       --ckpt "results/${S}__cap12M/ckpts/ckpt_29999_rank0.pt" \
@@ -70,8 +75,19 @@ else
   $PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref/$S" 2>&1 \
     | tee /tmp/b2_refine.txt || die "pose_refine fail — dán /tmp/b2_refine.txt"
 fi
-K1R=$(grep -oE "k1=[+-][0-9.]+" /tmp/b2_refine.txt 2>/dev/null | tail -1 | cut -d= -f2)
-echo "  render B2 sẽ dùng: k1=$K1R (chỉ stage 1 → vẫn SIMPLE_RADIAL, k2/tangential=0)"
+# đọc k1 THẲNG từ cameras.bin của workspace_ref (không phụ thuộc /tmp/b2_refine.txt —
+# file đó không tồn tại nếu đi nhánh skip "đã có")
+K1R=$($PY - <<'EOF'
+import struct
+with open("workspace_ref/HCM0204/sparse/0/cameras.bin","rb") as f:
+    f.read(8); cid,model,w,h = struct.unpack("<iiQQ", f.read(24))
+    if model == 2:   # SIMPLE_RADIAL: f,cx,cy,k1
+        print(repr(struct.unpack("<dddd", f.read(32))[3]))
+    else:            # OPENCV (stage 2): fx,fy,cx,cy,k1,k2,p1,p2 → in k1
+        print(repr(struct.unpack("<dddddddd", f.read(64))[4]))
+EOF
+)
+echo "  render B2 sẽ dùng: k1=$K1R (stage 1 → SIMPLE_RADIAL giữ nguyên, k2/tangential=0)"
 
 say "B2.2 train 12M trên workspace REFINED (~90ph)"
 if ! [ -s "results/${S}__ref12M/ckpts/ckpt_29999_rank0.pt" ]; then
@@ -90,6 +106,32 @@ $PY tools/render_test_poses.py --ckpt "results/${S}__ref12M/ckpts/ckpt_29999_ran
   2>&1 | tee /tmp/b2_render.log
 score renders/${S}__ref12M "B2"
 
+# ===================== B2X (tuỳ chọn, RUN_B2X=1) — STAGE-2 INTRINSICS =====================
+if [ "${RUN_B2X:-0}" = "1" ]; then
+  say "B2X. refine STAGE-2 (OPENCV intrinsics, pose khoá) + train + score (~100ph)"
+  if ! [ -s "workspace_ref2/$S/sparse/0/images.bin" ]; then
+    $PY tools/pose_refine.py --in_ws "workspace_raw/$S" --out_ws "workspace_ref2/$S" \
+      --refine_intrinsics 2>&1 | tee /tmp/b2x_refine.txt || die "pose_refine stage2 fail"
+  fi
+  if ! [ -s "results/${S}__ref2_12M/ckpts/ckpt_29999_rank0.pt" ]; then
+    $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_ref2/$S" --data-factor 1 \
+      --result-dir "$PWD/results/${S}__ref2_12M" --max-steps 30000 --test-every 999999 \
+      --disable-viewer --antialiased --with-ut --with-eval3d --raw-distortion \
+      --strategy.cap-max 12000000 --eval-steps 30000 --save-steps 30000 \
+      2>&1 | tee /tmp/b2x_train.log || die "train ref2"
+    rm -f results/${S}__ref2_12M/ckpts/ckpt_14999_rank0.pt; rm -rf results/${S}__ref2_12M/videos
+  fi
+  K1X=$(grep -oE "k1=[+-][0-9.]+" /tmp/b2x_refine.txt | tail -1 | cut -d= -f2)
+  K2X=$(grep -oE "k2=[+-][0-9.]+" /tmp/b2x_refine.txt | tail -1 | cut -d= -f2)
+  P1X=$(grep -oE "p1=[+-][0-9.]+" /tmp/b2x_refine.txt | tail -1 | cut -d= -f2)
+  P2X=$(grep -oE "p2=[+-][0-9.]+" /tmp/b2x_refine.txt | tail -1 | cut -d= -f2)
+  $PY tools/render_test_poses.py --ckpt "results/${S}__ref2_12M/ckpts/ckpt_29999_rank0.pt" \
+    --csv "$CSV" --out "renders/${S}__ref2_12M" --data_dir "workspace_ref2/$S" \
+    --antialiased --with_ut --radial_k1 "$K1X" --radial_k2 "$K2X" --tangential "$P1X" "$P2X" \
+    2>&1 | tee /tmp/b2x_render.log
+  score renders/${S}__ref2_12M "B2X"
+fi
+
 # ============================== B3 — TRANSIENT MASK ==============================
 say "B3.1 sinh transient masks (deeplabv3, ~10ph — tải weights 160MB lần đầu)"
 if [ "$(ls workspace_raw/$S/transient_masks 2>/dev/null | wc -l)" -lt 200 ]; then
@@ -97,9 +139,9 @@ if [ "$(ls workspace_raw/$S/transient_masks 2>/dev/null | wc -l)" -lt 200 ]; the
 else echo "  ⏩ masks đã có"; fi
 echo "  → soi mắt: workspace_raw/$S/transient_vis/*_vis.jpg (đỏ = bị mask)"
 
-say "B3.2 train 12M VỚI transient mask (~90ph)"
+say "B3.2 train 12M VỚI transient mask (~90ph) — BTS_TMASK=1 tường minh"
 if ! [ -s "results/${S}__tmask12M/ckpts/ckpt_29999_rank0.pt" ]; then
-  $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor 1 \
+  BTS_TMASK=1 $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor 1 \
     --result-dir "$PWD/results/${S}__tmask12M" --max-steps 30000 --test-every 999999 \
     --disable-viewer --antialiased --with-ut --with-eval3d --raw-distortion \
     --strategy.cap-max 12000000 --eval-steps 30000 --save-steps 30000 \

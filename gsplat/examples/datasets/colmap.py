@@ -389,11 +389,13 @@ class Dataset:
         image = imageio.imread(self.parser.image_paths[index])[..., :3]
         # BTS B3: transient mask (True = pixel TRANSIENT, loại khỏi loss).
         # File: <data_dir>/transient_masks/<image_stem>.png (255 = transient).
+        # ⚠ CHỈ kích hoạt khi BTS_TMASK=1 — nếu auto-detect theo thư mục, mọi lần train
+        # SAU KHI masks được tạo sẽ âm thầm bị mask theo (phá A/B, lây nhiễm production).
         _ip = self.parser.image_paths[index]
         _tm = os.path.join(os.path.dirname(os.path.dirname(_ip)), "transient_masks",
                            os.path.splitext(os.path.basename(_ip))[0] + ".png")
         tmask = None
-        if os.path.exists(_tm):
+        if os.environ.get("BTS_TMASK") == "1" and os.path.exists(_tm):
             tmask = imageio.imread(_tm)
             if tmask.ndim == 3:
                 tmask = tmask[..., 0]
