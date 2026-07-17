@@ -28,24 +28,22 @@ done
 FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ "$FREE" -lt 8 ] && die "đĩa ${FREE}GB<8"
 nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader | sed 's/^/  GPU /'
 
-# ngân sách VRAM: bỏ QUA (không chết) biến thể có cap×pixel vượt sức GPU hiện tại.
-# 4060 8GB: bonsai(1920×1080) 3M fit ~7GB, 6M OOM → ngưỡng ~7e12. Server 46GB: đặt CEIL cực lớn.
+# NGÂN SÁCH VRAM — đo bằng SỐ GAUSSIAN, gần như ĐỘC LẬP độ phân giải (bài học 17/07):
+#   1 gaussian SH3 = 59 float (means3+quats4+scales3+opac1+sh0:3+shN:45) ≈ 236B
+#   + Adam 2 state (472B) + grad (236B) ≈ ~944B ≈ 1KB/gaussian
+#   → 3M ≈ 2.8GB (4060 fit) · 6M ≈ 5.7GB + rasterizer → OOM trên 7.59GB khả dụng
+#   (heuristic cap×px CŨ SAI: chair 6M@0.9Mpx lọt lưới rồi vẫn OOM — res không cứu được)
+# Chừa ~4GB cho rasterizer/framebuffer/fragment: max_cap ≈ (VRAM_MiB − 4000) × 1000
 TOTAL_VRAM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
-OBJ_MAX_CAPPX=${OBJ_MAX_CAPPX:-$([ "$TOTAL_VRAM" -gt 20000 ] && echo 200e12 || echo 7.2e12)}
-px_of(){ $PY - "$1" <<'EOF'
-import struct, sys
-with open(f"workspace_r2v/{sys.argv[1]}/sparse/0/cameras.bin","rb") as f:
-    f.read(8); cid,model,w,h=struct.unpack("<iiQQ",f.read(24)); print(w*h)
-EOF
-}
+OBJ_MAX_CAP=${OBJ_MAX_CAP:-$(( (TOTAL_VRAM - 4000) * 1000 ))}   # 4060→~4.2M · L40S→~42M
+echo "  VRAM ${TOTAL_VRAM}MiB → cap tối đa máy này: $((OBJ_MAX_CAP/1000000))M gaussian"
 
 train_one(){  # $1=scene $2=tag $3=cap $4=extra_train_flags
   local s=$1 tag=$2 cap=$3 extra=${4:-}
   local res="results/r2v_${s}__${tag}"
-  local px; px=$(px_of "$s")
   if ! [ -s "$res/ckpts/ckpt_29999_rank0.pt" ]; then
-    if $PY -c "import sys; sys.exit(0 if $cap*$px > $OBJ_MAX_CAPPX else 1)"; then
-      echo "  ⏭ BỎ QUA $s $tag: cap×px=$(($cap*$px/1000000000000))e12 > ngưỡng VRAM máy này → ĐỂ SERVER CHẠY (OBJ_MAX_CAPPX)"
+    if [ "$cap" -gt "$OBJ_MAX_CAP" ]; then
+      echo "  ⏭ BỎ QUA $s $tag: cap $((cap/1000000))M > trần $((OBJ_MAX_CAP/1000000))M của máy này (~1KB/gaussian) → ĐỂ SERVER CHẠY"
       return 2
     fi
     $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_r2v/$s" --data-factor 1 \
