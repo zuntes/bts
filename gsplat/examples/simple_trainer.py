@@ -154,6 +154,8 @@ class Config:
     opacity_reg: float = 0.0
     # Scale regularization
     scale_reg: float = 0.0
+    # BTS: phạt gaussian hình kim theo effective rank (0 = tắt; thử 0.01-0.1, gate trước)
+    erank_reg: float = 0.0
 
     # Enable camera optimization.
     pose_opt: bool = False
@@ -804,6 +806,15 @@ class Runner:
                 loss += cfg.opacity_reg * torch.sigmoid(self.splats["opacities"]).mean()
             if cfg.scale_reg > 0.0:
                 loss += cfg.scale_reg * torch.exp(self.splats["scales"]).mean()
+            if cfg.erank_reg > 0.0:
+                # BTS: effective-rank reg (NeurIPS'24 arXiv:2406.11672) — phạt gaussian
+                # hình kim (erank→1, nguồn needle artifact ở cây/dây điện khi lệch view).
+                # p_i = s_i²/Σs², erank = exp(entropy); phạt phần erank < 1.5 (ép về planar+).
+                _s2 = torch.exp(self.splats["scales"]) ** 2          # [N,3]
+                _p = _s2 / (_s2.sum(dim=-1, keepdim=True) + 1e-12)
+                _ent = -(_p * torch.log(_p + 1e-12)).sum(dim=-1)
+                _erank = torch.exp(_ent)                              # ∈ [1,3]
+                loss += cfg.erank_reg * F.relu(1.5 - _erank).square().mean()
 
             loss.backward()
 

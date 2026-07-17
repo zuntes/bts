@@ -66,3 +66,11 @@ echo "#  F2 − H1-6M ≥ +0.002 → 45k steps (giá +50% giờ train — cân v
 echo "#  F3 ≥ F1,F2 riêng lẻ → gộp cả hai"
 echo "########################################################################"
 echo "DÁN [F1][F2][F3] + mốc [H1-6M] CHO CLAUDE."
+
+# ===================== F4 (tuỳ chọn, RUN_F4=1) — ERANK REG =====================
+if [ "${RUN_F4:-0}" = "1" ]; then
+  say "F4. erank-reg 0.02 @6M 30k (trị needle gaussian — cây/dây điện)"
+  tr_flags f4_erank 30000 "--erank-reg 0.02"
+  score renders_r2cal/f4_erank "F4-erank"
+  echo "  [F4] − [H1-6M] ≥ +0.002 → bật --erank-reg 0.02 cho production"
+fi
