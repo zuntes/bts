@@ -17,7 +17,8 @@ unset BTS_TMASK
 PY=.venv/bin/python
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
-score(){ $PY tools/score_local.py --pred_dir "$1" --gt_dir "$2" 2>&1 | grep -aE "n=|★" | sed "s/^/  [$3] /"; }
+score(){ [ "$(ls "$1" 2>/dev/null | wc -l)" -lt 5 ] && { echo "  [$3] ⏭ chưa có render (train bị bỏ/OOM)"; return 0; }
+         $PY tools/score_local.py --pred_dir "$1" --gt_dir "$2" 2>&1 | grep -aE "n=|★" | sed "s/^/  [$3] /"; }
 
 say "0. tiên quyết"
 [ -x "$PY" ] || die "thiếu .venv"
@@ -27,15 +28,31 @@ done
 FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ "$FREE" -lt 8 ] && die "đĩa ${FREE}GB<8"
 nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader | sed 's/^/  GPU /'
 
+# ngân sách VRAM: bỏ QUA (không chết) biến thể có cap×pixel vượt sức GPU hiện tại.
+# 4060 8GB: bonsai(1920×1080) 3M fit ~7GB, 6M OOM → ngưỡng ~7e12. Server 46GB: đặt CEIL cực lớn.
+TOTAL_VRAM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
+OBJ_MAX_CAPPX=${OBJ_MAX_CAPPX:-$([ "$TOTAL_VRAM" -gt 20000 ] && echo 200e12 || echo 7.2e12)}
+px_of(){ $PY - "$1" <<'EOF'
+import struct, sys
+with open(f"workspace_r2v/{sys.argv[1]}/sparse/0/cameras.bin","rb") as f:
+    f.read(8); cid,model,w,h=struct.unpack("<iiQQ",f.read(24)); print(w*h)
+EOF
+}
+
 train_one(){  # $1=scene $2=tag $3=cap $4=extra_train_flags
   local s=$1 tag=$2 cap=$3 extra=${4:-}
   local res="results/r2v_${s}__${tag}"
+  local px; px=$(px_of "$s")
   if ! [ -s "$res/ckpts/ckpt_29999_rank0.pt" ]; then
+    if $PY -c "import sys; sys.exit(0 if $cap*$px > $OBJ_MAX_CAPPX else 1)"; then
+      echo "  ⏭ BỎ QUA $s $tag: cap×px=$(($cap*$px/1000000000000))e12 > ngưỡng VRAM máy này → ĐỂ SERVER CHẠY (OBJ_MAX_CAPPX)"
+      return 2
+    fi
     $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_r2v/$s" --data-factor 1 \
       --result-dir "$PWD/$res" --max-steps 30000 --test-every 999999 \
       --disable-viewer --antialiased $extra \
       --strategy.cap-max "$cap" --eval-steps 30000 --save-steps 30000 --global-seed 42 \
-      2>&1 | tee "/tmp/r2v_${s}_${tag}.log" || die "train $s $tag"
+      2>&1 | tee "/tmp/r2v_${s}_${tag}.log" || { echo "  ⚠ train $s $tag lỗi (OOM?) — bỏ qua, làm tiếp"; return 2; }
     rm -f "$res/ckpts/ckpt_14999_rank0.pt"; rm -rf "$res/videos"
   else echo "  ⏩ $s $tag ckpt có"; fi
   if [ "$(ls "renders_r2v/${s}__${tag}" 2>/dev/null | wc -l)" -lt 5 ]; then
