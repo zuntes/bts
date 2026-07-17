@@ -156,6 +156,8 @@ class Config:
     scale_reg: float = 0.0
     # BTS: phạt gaussian hình kim theo effective rank (0 = tắt; thử 0.01-0.1, gate trước)
     erank_reg: float = 0.0
+    # BTS N1: σ blur-match cho scene GT mờ (0 = tắt) — làm mờ render trước khi tính loss
+    blur_match: float = 0.0
 
     # Enable camera optimization.
     pose_opt: bool = False
@@ -772,10 +774,20 @@ class Runner:
                 _tm = data["tmask"].to(device)  # [B,H,W] True = transient
                 pixels = torch.where(_tm[..., None], colors.detach(), pixels)
 
+            # BTS N1 blur-match (scene GT là video MỜ — bonsai): làm mờ RENDER trước khi
+            # so với GT mờ → geometry học SẮC, không bị ép "vẽ mờ" vào chính splats.
+            # Lúc test: render sắc rồi áp blur cùng σ hậu kỳ (tools/apply_blur.py) khớp GT.
+            _colors_loss = colors
+            if cfg.blur_match > 0.0:
+                from torchvision.transforms.functional import gaussian_blur as _gb
+                _k = 2 * int(3 * cfg.blur_match) + 1
+                _colors_loss = _gb(colors.permute(0, 3, 1, 2), [_k, _k],
+                                   [cfg.blur_match, cfg.blur_match]).permute(0, 2, 3, 1)
+
             # loss
-            l1loss = F.l1_loss(colors, pixels)
+            l1loss = F.l1_loss(_colors_loss, pixels)
             ssimloss = 1.0 - fused_ssim(
-                colors.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2), padding="valid"
+                _colors_loss.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2), padding="valid"
             )
             loss = l1loss * (1.0 - cfg.ssim_lambda) + ssimloss * cfg.ssim_lambda
             if cfg.depth_loss:
