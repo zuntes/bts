@@ -33,10 +33,10 @@ def audit_one(ws, max_iters=150):
     stored = list(cam.params)
 
     s = detect_obs_scale(rec, pycolmap)
-    s_int = round(s)
+    s_q = round(s * 4) / 4          # BTC dùng scale 1/1.5, 1/2, 1/4 → bội 0.25 hợp lệ
     if abs(s - 1.0) > 0.02:
-        assert abs(s - s_int) < 0.02, f"thang {s:.3f} không nguyên"
-        rescale_cameras(rec, s_int)
+        assert abs(s - s_q) < 0.02 and 0.5 <= s_q <= 8, f"thang {s:.3f} lạ — dừng"
+        rescale_cameras(rec, s_q)
 
     om = pycolmap.ObservationManager(rec)
     om.filter_observations_with_negative_depth()
@@ -85,7 +85,7 @@ def audit_one(ws, max_iters=150):
     e2 = ba(False, True)                     # stage 2: intrinsics
 
     p = np.array(next(iter(rec.cameras.values())).params, dtype=float)
-    p[:4] /= s_int if abs(s - 1) > 0.02 else 1   # fx fy cx cy về thang workspace
+    p[:4] /= s_q if abs(s - 1) > 0.02 else 1   # fx fy cx cy về thang workspace
     fx, fy, cx, cy, k1, k2, p1, p2 = p
     complex_dist = abs(k2) > 0.004 or abs(p1) > 3e-4 or abs(p2) > 3e-4
     return dict(scene=Path(ws).name, model0=model0, s=s, stored=stored,

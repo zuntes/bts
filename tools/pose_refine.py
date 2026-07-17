@@ -120,8 +120,8 @@ def main():
     if scaled:
         print(f"  ⚠ BTC export lệch thang (keypoints ở ảnh gốc, camera đã chia {s_obs:.1f}) "
               f"→ nhân camera ×{s_obs:.1f} cho BA, ghi ra sẽ chia lại", flush=True)
-        s_int = round(s_obs)
-        assert abs(s_obs - s_int) < 0.02, f"thang {s_obs} không nguyên — dữ liệu lạ, dừng"
+        s_int = round(s_obs * 4) / 4   # bội 0.25: BTC dùng 1/1.5 (chair), 1/2, 1/4
+        assert abs(s_obs - s_int) < 0.02 and 0.5 <= s_int <= 8, f"thang {s_obs} lạ — dừng"
         rescale_cameras(rec, s_int)
     err_check = rec.compute_mean_reprojection_error()  # giá trị stored, chỉ để log
 
