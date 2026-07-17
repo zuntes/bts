@@ -36,3 +36,4 @@ HCM0204,GATE_A1_stack12M,,,,,,,"★ ens12+L16-XL: v50=0.76641 (+0.0067 vs stack5
 HCM0204,GATE_A2_cap16M,,,,,,,"❌ cap16M single: v50=0.75636 (+0.0005 vs 12M < ngưỡng +0.002) — KNEE Ở 12M full-res, 16M không đáng 1.9h/scene. Xác nhận luật ~100px ràng buộc/gaussian (1.25 tỷ px ÷ 12M)"
 HCM0204,GATE_A3_ft512,,,,,,,"❌ ft512@12M: v50=0.75454 (−0.0013 vs 12M) — ft LPIPS HẠI khi cap đã bão hoà (khác 5M-era +0.4): LPIPS đổi bằng PSNR/SSIM khi không còn dung lượng thừa → BỎ ft512 khỏi mọi kế hoạch kể cả round 2"
 HCM0204,GATE_A4_stack3seed,,,,,,,"★★ ens(42,7,123)+L16-XL: v50=0.76902 (+0.0026 vs A1 2-seed ≥ ngưỡng +0.0015) — SEED 3 ĐÁNG GIÁ. Config vô địch round 1: 12M×3seed+L16-XL. Chuyển round 2: 3 seed cho production R2"
+HCM0204,P-POST_sweep,,,,,,,"❌ hậu xử lý cổ điển trên L16-render: best = blur0.4 Δpartial +0.0006 < ngưỡng 0.0015 (unsharp/gamma đều ÂM) — L16 đã hút hết phần này trên scene nét. CÒN MỞ: chạy lại trên bonsai/chair holdout (GT mờ, trục blur có thể ăn)"
