@@ -20,6 +20,8 @@ renders/
 renders_*/
 workspace/
 workspace_raw/
+workspace_r2/
+workspace_r2v/
 runs/
 *.zip
 *.pt
@@ -31,6 +33,7 @@ results/*
 
 # ----- Dữ liệu thô: quá lớn cho git → chuyển riêng qua rsync/scp -----
 VAI_NVS_DATA/
+VAI_NVS_DATA_ROUND_2/
 
 # ----- CHỈ-CLAUDE-ĐỌC: server KHÔNG có Claude → không cần, và repo PUBLIC → bớt phơi playbook -----
 # (git là luồng MỘT CHIỀU: local → server pull. Server không push lại; kết quả về qua terminal dán.)
