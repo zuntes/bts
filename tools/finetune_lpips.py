@@ -84,8 +84,11 @@ def main():
                 "hoặc dùng workspace đã undistort")
             f, cx, cy, _k1 = cam.params
             fx = fy = f
+        elif cam.model == "SIMPLE_PINHOLE":
+            f, cx, cy = cam.params
+            fx = fy = f
         else:
-            fx, fy, cx, cy = cam.params
+            fx, fy, cx, cy = cam.params[:4]
         Ks.append(torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1.0]]).float())
         whs.append((cam.width, cam.height))
 

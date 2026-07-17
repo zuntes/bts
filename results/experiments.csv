@@ -31,3 +31,8 @@ HCM0204,GATE_NHT_5M,24.959,0.8585,0.0759,0.1407,,,"★ CỔNG NHT@5M (L40S): v50
 HCM0204,GATE_CAP_8M,25.028,0.8579,0.0765,0.1351,,,"★ standard cap 8M (L40S): v50=0.75350 (+0.0062 vs 5M) — ĐÃ VƯỢT NHT@5M (0.75102)"
 HCM0204,GATE_CAP_12M,25.072,0.8591,0.0724,0.1307,,,"★★ standard cap 12M (L40S): v50=0.75587 (+0.0086 vs 5M, +0.0049 vs NHT@5M). NHT BỊ LOẠI DỨT KHOÁT — standard cap cao thắng mà đơn giản hơn (ckpt 1.1GB vs 3.3GB, không cần 3DGRUT). PHÁT HIỆN: cap CHƯA bão hoà — trần 8GB của 4060 đã kìm suốt. Đường cong: 5→8M +0.0021/triệu, 8→12M +0.0006/triệu (giảm 3.5×) → knee ~12-16M. Dự phóng SUB7 = 12M + ens2seed + L16-XL → BTC ~77.8"
 HCM0204,GATE_P4_bilagrid12M,23.915,0.8579,0.0729,0.1295,,,"❌ P4 @12M: v50=0.74905 (−0.0068). Grid hút offset màu → PSNR −1.16dB dù LPIPS đẹp nhất từng đo (0.1295). Best-case sau sửa màu: +0.0001=0 → BỎ P4"
+HCM0204,GATE_A1_ens12,,,,,,,"ens(42,7)@12M raw: v50=0.76277 (+0.0069 vs plain12M — ensemble vẫn ăn đậm ở 12M)"
+HCM0204,GATE_A1_stack12M,,,,,,,"★ ens12+L16-XL: v50=0.76641 (+0.0067 vs stack5M 0.75968 — stack CHUYỂN TỐT sang 12M; L16 trên ens12 +0.0036)"
+HCM0204,GATE_A2_cap16M,,,,,,,"❌ cap16M single: v50=0.75636 (+0.0005 vs 12M < ngưỡng +0.002) — KNEE Ở 12M full-res, 16M không đáng 1.9h/scene. Xác nhận luật ~100px ràng buộc/gaussian (1.25 tỷ px ÷ 12M)"
+HCM0204,GATE_A3_ft512,,,,,,,"❌ ft512@12M: v50=0.75454 (−0.0013 vs 12M) — ft LPIPS HẠI khi cap đã bão hoà (khác 5M-era +0.4): LPIPS đổi bằng PSNR/SSIM khi không còn dung lượng thừa → BỎ ft512 khỏi mọi kế hoạch kể cả round 2"
+HCM0204,GATE_A4_stack3seed,,,,,,,"★★ ens(42,7,123)+L16-XL: v50=0.76902 (+0.0026 vs A1 2-seed ≥ ngưỡng +0.0015) — SEED 3 ĐÁNG GIÁ. Config vô địch round 1: 12M×3seed+L16-XL. Chuyển round 2: 3 seed cho production R2"

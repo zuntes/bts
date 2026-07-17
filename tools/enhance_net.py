@@ -120,8 +120,10 @@ def render_train_views(ws, ckpt_path, out_dir, with_ut, radial_k1, antialiased=T
             cam = cams[im.camera_id]
             if cam.model == "SIMPLE_RADIAL":
                 f, cx, cy, _ = cam.params; fx = fy = f
+            elif cam.model == "SIMPLE_PINHOLE":
+                f, cx, cy = cam.params; fx = fy = f
             else:
-                fx, fy, cx, cy = cam.params
+                fx, fy, cx, cy = cam.params[:4]
             K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1.0]]).float()[None].to(dev)
             vm = colmap_w2c_to_normalized_viewmat(im.R, im.tvec, transform)
             vm = torch.from_numpy(vm).float()[None].to(dev)
