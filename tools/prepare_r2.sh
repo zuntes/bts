@@ -42,10 +42,12 @@ for s in $SCENES; do
 done
 
 say "2. verify chéo: CSV test ≡ cameras.bin (fx/cx/cy/w/h) + đếm ảnh + phân nhánh chiến thuật"
-$PY - <<'EOF' || die "verify fail — ĐỌC LỖI Ở TRÊN, đừng train tiếp"
-import csv, struct, sys
+# R2_ROOT qua env: heredoc <<'EOF' KHÔNG nội suy biến shell (cố ý — python có nhiều $),
+# nên truyền đường dẫn bằng biến môi trường thay vì hardcode (đã dính bug này 17/07).
+R2_ROOT="$R2" $PY - <<'EOF' || die "verify fail — ĐỌC LỖI Ở TRÊN, đừng train tiếp"
+import csv, os, struct, sys
 from pathlib import Path
-R2 = Path("VAI_NVS_DATA_ROUND_2/VAI_NVS_DATA_ROUND2")
+R2 = Path(os.environ["R2_ROOT"])
 NP = {0: 3, 1: 4, 2: 4, 3: 5, 4: 8, 5: 8}
 MO = {0: "SIMPLE_PINHOLE", 1: "PINHOLE", 2: "SIMPLE_RADIAL", 3: "RADIAL", 4: "OPENCV"}
 bad = 0
