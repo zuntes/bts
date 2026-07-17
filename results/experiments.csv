@@ -57,3 +57,5 @@ HCM0204,GATE_DIFIX,,,,,,,"❌❌ DIFIX LOẠI (zero-shot): D-onL16=0.66194 (PSNR
 HCM0204half,H1_cap_sweep,,,,,,,"★ GATE_R2_HCM: 3M=0.80257, 6M=0.80483 (+0.0023), 9M=0.80515 (+0.0003) → KNEE=6M, chốt CAP_HCM=6M production (profiler đoán 3.5M hơi thấp — luật ~52px/gaussian ở half-res chứ không phải 85)"
 HCM0204half,H2_ens2x6M,27.557,0.9216,0.0374,0.0770,,,"★ ensemble 2seed@6M half-res = 0.81102 (+0.0062 vs single) — luật seed đứng vững ở mọi độ phân giải"
 bonsai,O4_SH4_cap3M,27.582,0.8699,0.1869,0.2811,,,"★ SH bậc 4 = 0.71402 (+0.0054 vs SH3 cùng cap) — PSNR +0.29dB SSIM +0.004: phản chiếu bàn kính cần màu theo góc nhìn. Trực giao với vgg-enhancer → cộng dồn. Chờ chair-SH4 để chốt OBJ_SH_DEGREE=4"
+bonsai,O1_cap6M_server,26.420,0.8640,0.1993,0.2922,,,"❌ 6M = 0.70083 (−0.0079 vs 3M, PSNR −0.9dB!) — CAP QUÁ KNEE TRỪ ĐIỂM THẬT trên scene mờ: gaussian thừa fit nhiễu blur video. Profiler đoán 6M theo pixel-budget SAI cho scene mờ → luật cap phải chiết khấu theo sharpness. CHỐT CAP_bonsai=3M"
+R2_ALL,REPRO_2MAY,,,,,,,"Tái lập 4060 vs L40S: bonsai3M 0.70867/0.70874, O2 0.71879/0.71908, chair3M 0.66176/0.66142 — lệch ≤0.0004: kết quả gate chuyển máy tin được"
