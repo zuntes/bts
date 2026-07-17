@@ -10,7 +10,8 @@
 # train qua đúng đường CSV, PSNR>=20) — chặn bug transform trước khi phí GPU.
 #
 # Config qua env (mặc định an toàn, chỉnh sau khi có gate round 2):
-#   SEEDS="42 7"  CAP_HCM=6000000  CAP_OBJ=3000000  ZIP=submission_R2_SUB1.zip
+#   SUBTAG=2 SEEDS="42 7 123"  CAP_HCM=...  CAP_OBJ=...  ENH_ARCH=vgg|unet
+#   SUBTAG tách output giữa các lần production (renders __sub$SUBTAG, zip R2_SUB$SUBTAG)
 # Chạy: tmux new -s r2 && bash tools/run_sub_r2.sh 2>&1 | tee /tmp/run_r2.txt
 # ============================================================================
 set -uo pipefail
@@ -24,7 +25,9 @@ SCENES_OBJ="bonsai chair"
 SEEDS=${SEEDS:-"42 7"}
 CAP_HCM=${CAP_HCM:-6000000}     # 1320×989 = 1/4 pixel của round 1 → knee thấp hơn 12M nhiều
 CAP_OBJ=${CAP_OBJ:-3000000}     # scene object-centric nhỏ (54-80k điểm SfM)
-ZIP=${ZIP:-submission_R2_SUB1.zip}
+SUBTAG=${SUBTAG:-1}             # đổi mỗi lần production để không đè/skip nhầm output cũ
+ENH_ARCH=${ENH_ARCH:-vgg}       # GATE_B1 17/07: vgg prior thắng L16-unet +0.0052 → mặc định vgg
+ZIP=${ZIP:-submission_R2_SUB${SUBTAG}.zip}
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
 disk_guard(){ FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ "$FREE" -lt 8 ] && die "đĩa ${FREE}GB<8"; }
@@ -98,7 +101,7 @@ train_render_seed(){   # $1=scene $2=seed $3=cap $4=branch(gut|classic)
 for s in $SCENES_OBJ $SCENES_HCM; do
   case " $SCENES_OBJ " in *" $s "*) branch=classic; cap=$CAP_OBJ;; *) branch=gut; cap=$CAP_HCM;; esac
   say "SCENE $s ($branch, cap=$cap)"
-  [ -d "renders_r2/${s}__sub" ] && { echo "  ⏩ $s hoàn tất"; continue; }
+  [ -d "renders_r2/${s}__sub${SUBTAG}" ] && { echo "  ⏩ $s hoàn tất"; continue; }
 
   DIRS=""
   for seed in $SEEDS; do
@@ -107,24 +110,26 @@ for s in $SCENES_OBJ $SCENES_HCM; do
   done
 
   N_SEED=$(echo $SEEDS | wc -w)
+  ENS="renders_r2/${s}__ens${SUBTAG}"
   if [ "$N_SEED" -gt 1 ]; then
-    $PY tools/ensemble.py --dirs $DIRS --out "renders_r2/${s}__ens" --mode mean >/dev/null || die "ensemble $s"
+    $PY tools/ensemble.py --dirs $DIRS --out "$ENS" --mode mean >/dev/null || die "ensemble $s"
   else
-    rm -rf "renders_r2/${s}__ens"; cp -r "renders_r2/${s}__s${SEEDS}" "renders_r2/${s}__ens"
+    rm -rf "$ENS"; cp -r "renders_r2/${s}__s${SEEDS}" "$ENS"
   fi
 
-  # L16-XL per-scene (loss mô phỏng thang BTC; học lỗi hệ thống render↔ảnh thật)
+  # Enhancer per-scene (ENH_ARCH=vgg: B1 restoration prior thắng L16-unet +0.0052, GATE_B 17/07)
   FIRST_SEED=${SEEDS%% *}
   L16_FLAGS=""
   [ "$branch" = gut ] && L16_FLAGS="--with_ut --radial_k1 $(k1_of "$s")"
-  if ! [ -s "results/r2_${s}__l16xl/net.pt" ]; then
+  NET="results/r2_${s}__enh_${ENH_ARCH}/net.pt"
+  if ! [ -s "$NET" ]; then
     $PY tools/enhance_net.py train --workspace "workspace_r2/$s" \
       --ckpt "results/r2_${s}__s${FIRST_SEED}/ckpts/ckpt_29999_rank0.pt" \
-      --out "results/r2_${s}__l16xl/net.pt" $L16_FLAGS \
-      --steps 8000 --ch_mult 2 --patch 320 2>&1 | tee "/tmp/r2_l16_${s}.log" || die "L16 train $s"
+      --out "$NET" $L16_FLAGS --arch "$ENH_ARCH" \
+      --steps 8000 --ch_mult 2 --patch 320 2>&1 | tee "/tmp/r2_enh_${s}.log" || die "enh train $s"
   fi
-  $PY tools/enhance_net.py apply --net "results/r2_${s}__l16xl/net.pt" \
-    --in_dir "renders_r2/${s}__ens" --out_dir "renders_r2/${s}__sub" >/dev/null || die "L16 apply $s"
+  $PY tools/enhance_net.py apply --net "$NET" \
+    --in_dir "$ENS" --out_dir "renders_r2/${s}__sub${SUBTAG}" >/dev/null || die "enh apply $s"
   echo "[$(date +%H:%M)] SCENE-OK $s"
 done
 
@@ -137,7 +142,7 @@ for sd in sorted(Path("$R2").iterdir()):
     if not (sd / "test/test_poses.csv").exists(): continue
     s = sd.name; out = Path("renders_sub_r2") / s; out.mkdir(parents=True, exist_ok=True)
     for r in csv.DictReader(open(sd / "test/test_poses.csv")):
-        n = r["image_name"]; p = Path(f"renders_r2/{s}__sub") / (Path(n).stem + ".png")
+        n = r["image_name"]; p = Path(f"renders_r2/{s}__sub${SUBTAG}") / (Path(n).stem + ".png")
         if not p.exists(): print("THIẾU", s, n); miss += 1; continue
         cv2.imwrite(str(out / n), cv2.imread(str(p)), flags)
 print(f"repackage: thiếu {miss}")
