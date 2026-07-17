@@ -5,6 +5,7 @@
 
 # ----- Môi trường: rebuild trên server bằng tools/SETUP_*.sh -----
 .venv/
+.venv_ba/
 3dgrut/
 __pycache__/
 *.pyc
