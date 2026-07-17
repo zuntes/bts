@@ -62,3 +62,4 @@ R2_ALL,REPRO_2MAY,,,,,,,"Tái lập 4060 vs L40S: bonsai3M 0.70867/0.70874, O2 0
 chair,O4_SH4_cap3M,24.785,0.7667,0.2425,0.2878,,,"SH4 = 0.66358 (+0.0018 — sát dưới ngưỡng 0.002 nhưng dương, không hại) → OBJ_SH_DEGREE=4 chung cả 2 scene classic (bonsai +0.0054 kéo). CONFIG PROD 7/7 KHOÁ"
 bonsai,SS2_supersample,27.133,0.8612,0.1902,0.2920,,,"❌ supersample×2 = 0.70438 (−0.0043) — render NÉT HƠN lệch xa GT MỜ hơn. Loại N4 cho scene mờ"
 chair,SS2_supersample,24.172,0.7463,0.2435,0.2970,,,"❌ supersample×2 = 0.65011 (−0.0117) — cùng cơ chế. N4 LOẠI"
+HCM0204half,F1_depth_NaN,,,,,,,"❌ depth-loss KHÔNG TƯƠNG THÍCH nhánh 3DGUT: NaN @step600 (RGB+ED qua UT chưa hỗ trợ + depth dùng keypoint lệch thang 4×) → opacity sập → MCMC multinomial assert. Gạch F1/F3 khỏi HCM; depth-loss chỉ còn ứng viên cho nhánh classic (bonsai/chair) nếu cần"

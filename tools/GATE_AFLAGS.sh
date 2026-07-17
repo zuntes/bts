@@ -46,17 +46,24 @@ tr_flags(){  # $1=tag $2=steps $3=extra
   fi
 }
 
-say "F1. depth-loss @6M 30k (~40ph)"
-tr_flags f1_depth 30000 "--depth-loss --depth-lambda 1e-2"
-score renders_r2cal/f1_depth "F1-depth"
+# ⚠ 17/07 23h: --depth-loss + --with-ut/--raw-distortion → loss NaN @step600 → opacity sập
+# → MCMC multinomial assert. 2 nghi phạm: (a) RGB+ED chưa hỗ trợ đường UT; (b) depth-loss
+# dùng keypoint 2D = lớp data lệch thang 4× (DOC3 §2.4). Mặc định TẮT; RUN_DEPTH=1 chỉ khi debug.
+if [ "${RUN_DEPTH:-0}" = "1" ]; then
+  say "F1. depth-loss @6M 30k (~40ph)"
+  tr_flags f1_depth 30000 "--depth-loss --depth-lambda 1e-2"
+  score renders_r2cal/f1_depth "F1-depth"
+fi
 
 say "F2. 45k steps @6M (~60ph)"
 tr_flags f2_45k 45000 ""
 score renders_r2cal/f2_45k "F2-45k"
 
-say "F3. depth + 45k (~60ph)"
-tr_flags f3_both 45000 "--depth-loss --depth-lambda 1e-2"
-score renders_r2cal/f3_both "F3-both"
+if [ "${RUN_DEPTH:-0}" = "1" ]; then
+  say "F3. depth + 45k (~60ph)"
+  tr_flags f3_both 45000 "--depth-loss --depth-lambda 1e-2"
+  score renders_r2cal/f3_both "F3-both"
+fi
 
 echo
 echo "########################################################################"
