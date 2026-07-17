@@ -51,6 +51,25 @@ print(f"✓ CSV half ({len(rows)} pose, {rows[0]['width']}x{rows[0]['height']}) 
 EOF
 else echo "  ⏩ bàn chấm có"; fi
 
+# gsplat --data-factor 2 ĐÒI thư mục images_2 có sẵn (quy ước MipNeRF — parser không tự tạo,
+# raise "Image folder ... does not exist"). Tự sinh PNG ÷2 bằng INTER_AREA (cùng phép với gt_half).
+if [ "$(ls "workspace_raw/$S/images_2" 2>/dev/null | wc -l)" -lt 240 ]; then
+  echo "  → sinh workspace_raw/$S/images_2 (240 ảnh ÷2, INTER_AREA, ~2-3ph)..."
+  $PY - <<EOF || die "sinh images_2"
+import cv2
+from pathlib import Path
+src = Path("workspace_raw/$S/images"); dst = Path("workspace_raw/$S/images_2")
+dst.mkdir(exist_ok=True)
+for p in sorted(src.iterdir()):
+    o = dst / (p.stem + ".png")
+    if o.exists(): continue
+    im = cv2.imread(str(p))
+    cv2.imwrite(str(o), cv2.resize(im, (im.shape[1] // 2, im.shape[0] // 2),
+                                   interpolation=cv2.INTER_AREA))
+print("✓ images_2:", len(list(dst.iterdir())), "ảnh")
+EOF
+else echo "  ⏩ images_2 có"; fi
+
 train_render(){  # $1=cap_tag $2=cap $3=seed
   local tag=$1 cap=$2 seed=$3 res="results/r2cal_${S}__${1}_s${3}"
   if ! [ -s "$res/ckpts/ckpt_29999_rank0.pt" ]; then
