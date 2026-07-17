@@ -9,7 +9,15 @@
 set -uo pipefail
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
 PY=.venv/bin/python
-R2=VAI_NVS_DATA_ROUND_2/VAI_NVS_DATA_ROUND2
+# TỰ DÒ root data R2 — layout khác nhau giữa 2 máy (local có tầng lồng do giải nén zip,
+# server phẳng). Nhận diện bằng SỰ TỒN TẠI của scene thật, không giả định đường dẫn.
+R2=""
+for c in VAI_NVS_DATA_ROUND_2/VAI_NVS_DATA_ROUND2 VAI_NVS_DATA_ROUND_2 VAI_NVS_DATA_ROUND2; do
+  [ -s "$c/bonsai/test/test_poses.csv" ] && { R2="$c"; break; }
+done
+[ -n "$R2" ] || { echo "❌ không tìm thấy data round 2 (thử: VAI_NVS_DATA_ROUND_2[/VAI_NVS_DATA_ROUND2])"; \
+  echo "   thấy gì ở đây: $(ls -d VAI_NVS_DATA_ROUND_2/* 2>/dev/null | head -3)"; exit 1; }
+echo "  data R2: $R2"
 SCENES="bonsai chair HCM0421 HCM0539 HCM0540 HCM0644 HCM0674"
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }

@@ -19,7 +19,12 @@ PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 unset BTS_TMASK   # chống lây nhiễm transient-mask (DOC3): production KHÔNG mask trừ khi gate bảo bật
 PY=.venv/bin/python
-R2=VAI_NVS_DATA_ROUND_2/VAI_NVS_DATA_ROUND2
+# TỰ DÒ root data R2 (layout local có tầng lồng, server phẳng — xem prepare_r2.sh)
+R2=""
+for c in VAI_NVS_DATA_ROUND_2/VAI_NVS_DATA_ROUND2 VAI_NVS_DATA_ROUND_2 VAI_NVS_DATA_ROUND2; do
+  [ -s "$c/bonsai/test/test_poses.csv" ] && { R2="$c"; break; }
+done
+[ -n "$R2" ] || { echo "❌ không tìm thấy data round 2"; exit 1; }
 SCENES_HCM="HCM0421 HCM0539 HCM0540 HCM0644 HCM0674"
 SCENES_OBJ="bonsai chair"
 SEEDS=${SEEDS:-"42 7"}
