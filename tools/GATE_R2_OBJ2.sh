@@ -23,6 +23,24 @@ for s in bonsai chair; do
 done
 FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ "$FREE" -lt 8 ] && die "đĩa ${FREE}GB<8"
 
+# ===== O5: enhancer VGG vs UNET trên ĐÚNG 2 scene ưu tiên (rẻ: tái dùng ckpt cap3M) =====
+# Vì sao cần: B1 đo vgg thắng +0.0052 nhưng trên HCM (scene NÉT). O2 vừa đo unet trên
+# bonsai +0.0101 / chair chỉ +0.0036 → enhancer hành xử KHÁC nhau theo độ mờ scene.
+# Production sẽ dùng vgg cho 2 scene này → phải xác thực trước khi đốt 10h train.
+for s in bonsai chair; do
+  say "$s — O5 enhancer VGG (so unet: bonsai 0.71879 · chair 0.66535)"
+  NET="results/r2v_${s}__enhvgg/net.pt"
+  if ! [ -s "$NET" ]; then
+    $PY tools/enhance_net.py train --workspace "workspace_r2v/$s" \
+      --ckpt "results/r2v_${s}__cap3M/ckpts/ckpt_29999_rank0.pt" \
+      --out "$NET" --arch vgg --steps 8000 --patch 320 \
+      2>&1 | tee "/tmp/r2v_vgg_${s}.log" || die "O5 train $s"
+  fi
+  $PY tools/enhance_net.py apply --net "$NET" \
+    --in_dir "renders_r2v/${s}__cap3M" --out_dir "renders_r2v/${s}__vgg" >/dev/null || die "O5 apply $s"
+  score "renders_r2v/${s}__vgg" "workspace_r2v/$s/val_gt" "O5-$s-VGG"
+done
+
 for s in bonsai chair; do
   say "$s — O4 SH degree 4 @3M"
   res="results/r2v_${s}__sh4"
@@ -44,6 +62,9 @@ done
 
 echo
 echo "########################################################################"
+echo "#  VERDICT O5 (arch enhancer) — mốc unet: bonsai 0.71879 · chair 0.66535 (base .70867/.66176)"
+echo "#    O5 > unet → production 2 scene dùng ENH_ARCH=vgg (mặc định) ✓"
+echo "#    O5 < unet → ĐỔI: 2 scene lạ dùng unet, HCM dùng vgg (arch per-scene)"
 echo "#  VERDICT O4 — so [O4-*-SH4] với [O1-*-3M] (cùng cap, chỉ khác SH độ 4 vs 3)"
 echo "#  Δ ≥ +0.002 trên scene có phản chiếu → production bonsai/chair dùng --sh-degree 4"
 echo "#  (SH4 chỉ đáng cho 2 scene vật liệu khó; HCM giữ SH3 — drone ít specular)"
