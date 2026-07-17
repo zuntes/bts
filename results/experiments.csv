@@ -60,3 +60,5 @@ bonsai,O4_SH4_cap3M,27.582,0.8699,0.1869,0.2811,,,"★ SH bậc 4 = 0.71402 (+0.
 bonsai,O1_cap6M_server,26.420,0.8640,0.1993,0.2922,,,"❌ 6M = 0.70083 (−0.0079 vs 3M, PSNR −0.9dB!) — CAP QUÁ KNEE TRỪ ĐIỂM THẬT trên scene mờ: gaussian thừa fit nhiễu blur video. Profiler đoán 6M theo pixel-budget SAI cho scene mờ → luật cap phải chiết khấu theo sharpness. CHỐT CAP_bonsai=3M"
 R2_ALL,REPRO_2MAY,,,,,,,"Tái lập 4060 vs L40S: bonsai3M 0.70867/0.70874, O2 0.71879/0.71908, chair3M 0.66176/0.66142 — lệch ≤0.0004: kết quả gate chuyển máy tin được"
 chair,O4_SH4_cap3M,24.785,0.7667,0.2425,0.2878,,,"SH4 = 0.66358 (+0.0018 — sát dưới ngưỡng 0.002 nhưng dương, không hại) → OBJ_SH_DEGREE=4 chung cả 2 scene classic (bonsai +0.0054 kéo). CONFIG PROD 7/7 KHOÁ"
+bonsai,SS2_supersample,27.133,0.8612,0.1902,0.2920,,,"❌ supersample×2 = 0.70438 (−0.0043) — render NÉT HƠN lệch xa GT MỜ hơn. Loại N4 cho scene mờ"
+chair,SS2_supersample,24.172,0.7463,0.2435,0.2970,,,"❌ supersample×2 = 0.65011 (−0.0117) — cùng cơ chế. N4 LOẠI"
