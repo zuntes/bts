@@ -117,6 +117,8 @@ if [ "${PACK_ONLY:-0}" = "1" ]; then
 fi
 [ "${PACK_ONLY:-0}" = "1" ] || for s in $SCENES_OBJ $SCENES_HCM; do
   case " $SCENES_OBJ " in *" $s "*) branch=classic; cap=$CAP_OBJ;; *) branch=gut; cap=$CAP_HCM;; esac
+  # cap riêng per-scene qua env CAP_<scene> (vd CAP_bonsai=6000000 — profiler/O-gate quyết)
+  eval "override=\${CAP_${s}:-}"; [ -n "$override" ] && cap=$override
   say "SCENE $s ($branch, cap=$cap)"
   [ -d "renders_r2/${s}__sub${SUBTAG}" ] && { echo "  ⏩ $s hoàn tất"; continue; }
 
