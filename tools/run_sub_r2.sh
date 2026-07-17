@@ -25,8 +25,10 @@ for c in VAI_NVS_DATA_ROUND_2/VAI_NVS_DATA_ROUND2 VAI_NVS_DATA_ROUND_2 VAI_NVS_D
   [ -s "$c/bonsai/test/test_poses.csv" ] && { R2="$c"; break; }
 done
 [ -n "$R2" ] || { echo "❌ không tìm thấy data round 2"; exit 1; }
-SCENES_HCM="HCM0421 HCM0539 HCM0540 HCM0644 HCM0674"
-SCENES_OBJ="bonsai chair"
+# Override được qua env để CHIA VIỆC 2 máy (server: SCENES_OBJ="" · 4060: SCENES_HCM="")
+SCENES_HCM=${SCENES_HCM-"HCM0421 HCM0539 HCM0540 HCM0644 HCM0674"}
+SCENES_OBJ=${SCENES_OBJ-"bonsai chair"}
+OBJ_SH_DEGREE=${OBJ_SH_DEGREE:-3}   # O4 gate quyết: 4 nếu SH4 thắng trên holdout bonsai/chair
 SEEDS=${SEEDS:-"42 7"}
 CAP_HCM=${CAP_HCM:-6000000}     # 1320×989 = 1/4 pixel của round 1 → knee thấp hơn 12M nhiều
 CAP_OBJ=${CAP_OBJ:-3000000}     # scene object-centric nhỏ (54-80k điểm SfM)
@@ -69,6 +71,8 @@ train_render_seed(){   # $1=scene $2=seed $3=cap $4=branch(gut|classic)
     K1=$(k1_of "$s") || die "k1_of $s"
     UT_TRAIN="--with-ut --with-eval3d --raw-distortion"
     UT_REND="--with_ut --radial_k1 $K1"
+  else
+    UT_TRAIN="--sh-degree $OBJ_SH_DEGREE"   # O4: SH4 cho scene vật liệu khó nếu gate thắng
   fi
   if ! [ -s "$res/ckpts/ckpt_29999_rank0.pt" ]; then
     disk_guard
@@ -103,7 +107,15 @@ train_render_seed(){   # $1=scene $2=seed $3=cap $4=branch(gut|classic)
 }
 
 # ---------- vòng chính ----------
-for s in $SCENES_OBJ $SCENES_HCM; do
+if [ "${PACK_ONLY:-0}" = "1" ]; then
+  echo "PACK_ONLY: bỏ train, đóng gói thẳng từ renders_r2/*__sub${SUBTAG}"
+  SCENES_HCM="HCM0421 HCM0539 HCM0540 HCM0644 HCM0674"; SCENES_OBJ="bonsai chair"
+  for s in $SCENES_OBJ $SCENES_HCM; do
+    [ "$(ls "renders_r2/${s}__sub${SUBTAG}" 2>/dev/null | wc -l)" -ge 5 ] \
+      || die "PACK_ONLY nhưng thiếu renders_r2/${s}__sub${SUBTAG} — chưa gộp đủ 7 scene (thiếu = LOẠI BÀI)"
+  done
+fi
+[ "${PACK_ONLY:-0}" = "1" ] || for s in $SCENES_OBJ $SCENES_HCM; do
   case " $SCENES_OBJ " in *" $s "*) branch=classic; cap=$CAP_OBJ;; *) branch=gut; cap=$CAP_HCM;; esac
   say "SCENE $s ($branch, cap=$cap)"
   [ -d "renders_r2/${s}__sub${SUBTAG}" ] && { echo "  ⏩ $s hoàn tất"; continue; }
@@ -137,6 +149,15 @@ for s in $SCENES_OBJ $SCENES_HCM; do
     --in_dir "$ENS" --out_dir "renders_r2/${s}__sub${SUBTAG}" >/dev/null || die "enh apply $s"
   echo "[$(date +%H:%M)] SCENE-OK $s"
 done
+
+# chạy chia máy (SCENES_OBJ="" hoặc SCENES_HCM="") → BỎ đóng gói ở máy này,
+# gộp renders về 1 máy rồi PACK_ONLY=1 để đóng gói đủ 7 scene (thiếu scene = LOẠI BÀI)
+if [ -z "$SCENES_HCM" ] || [ -z "$SCENES_OBJ" ]; then
+  echo; echo "⏸ CHẠY MỘT PHẦN (SCENES_HCM='$SCENES_HCM' · SCENES_OBJ='$SCENES_OBJ')"
+  echo "  → KHÔNG đóng gói ở đây. Gộp renders_r2/*__sub${SUBTAG} về 1 máy rồi chạy:"
+  echo "     PACK_ONLY=1 SUBTAG=$SUBTAG bash tools/run_sub_r2.sh"
+  exit 0
+fi
 
 say "ĐÓNG GÓI (PNG → JPEG q96 đúng tên CSV → zip)"
 $PY - <<EOF || die "repackage"
