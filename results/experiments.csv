@@ -81,3 +81,5 @@ chair,W6_weighted_ens,25.236,0.7834,0.2413,0.2739,,,"weighted-ens (hill-climb tr
 R2_ALL,SKY_HANDLING,,,,,,,"❌ sky-loss/skybox KHÔNG áp dụng: đo 7 scene — heuristic 4-5% HCM là MÁI NHÀ trắng (không phải trời, drone nhìn xuống), bonsai 19% là sofa (indoor). Không có trời thật trong data → loại không tốn GPU"
 chair,MED6,,,,,,,"median 6-member 0.67593 < mean 0.67662 — MEAN thắng cả ở nhiều member, đóng hồ sơ ensemble-mode"
 R2_OBJ,IBR_hybrid,,,,,,,"❌❌ HYBRID IBR (G7/G8 — lá bài r1) LOẠI: chair −0.021/−0.028, bonsai −0.023/−0.030 (τ12/τ20, phủ warp 79-91%). Cơ chế: depth splats sai sub-pixel → texture thật đặt lệch → SSIM/LPIPS phạt lệch-vị nặng hơn phạt mờ. Càng phủ càng tệ. Cùng ngày: ENHXL +0.0010, DUO +0.0005 (dưới ngưỡng) — nhánh enhancer-tuning gần trần"
+chair,ENH2MEAN,,,,,,,"★ mean(vgg8k, vggXL-20k/448) = 0.68697 — BEST chair (+0.0016 vs 1 net). ENSEMBLE-OF-ENHANCERS thắng: tầng SUB3 (hậu-render, +0.0016/scene ≈ +0.16 tổng, không đụng zip SUB2)"
+R2_ALL,Q98_G10,,,,,,,"❌ q98 THUA q96 trên bonsai (0.73232<0.73495; PNG 0.74125): GT BTC cũng là JPEG — độ mượt q96 khớp đặc trưng nén GT. GIỮ q96, đóng G10 (117MB trống không đổi được thành điểm)"
