@@ -23,6 +23,7 @@ workspace/
 workspace_raw/
 workspace_r2/
 workspace_r2v/
+workspace_r2cal/
 runs/
 *.zip
 *.pt
