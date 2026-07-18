@@ -80,3 +80,4 @@ HCM0204half,CE4_HCM,27.731,0.9247,0.0380,0.0759,,,"★★ CE-HCM (3M+6M+9M+6Ms7)
 chair,W6_weighted_ens,25.236,0.7834,0.2413,0.2739,,,"weighted-ens (hill-climb trọng số 6 member) = 0.67687 vs mean đều 0.67662 (+0.0003 = nhiễu) → GIỮ MEAN ĐỀU, không phức tạp hoá prod"
 R2_ALL,SKY_HANDLING,,,,,,,"❌ sky-loss/skybox KHÔNG áp dụng: đo 7 scene — heuristic 4-5% HCM là MÁI NHÀ trắng (không phải trời, drone nhìn xuống), bonsai 19% là sofa (indoor). Không có trời thật trong data → loại không tốn GPU"
 chair,MED6,,,,,,,"median 6-member 0.67593 < mean 0.67662 — MEAN thắng cả ở nhiều member, đóng hồ sơ ensemble-mode"
+R2_OBJ,IBR_hybrid,,,,,,,"❌❌ HYBRID IBR (G7/G8 — lá bài r1) LOẠI: chair −0.021/−0.028, bonsai −0.023/−0.030 (τ12/τ20, phủ warp 79-91%). Cơ chế: depth splats sai sub-pixel → texture thật đặt lệch → SSIM/LPIPS phạt lệch-vị nặng hơn phạt mờ. Càng phủ càng tệ. Cùng ngày: ENHXL +0.0010, DUO +0.0005 (dưới ngưỡng) — nhánh enhancer-tuning gần trần"
