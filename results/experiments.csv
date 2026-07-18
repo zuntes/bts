@@ -73,3 +73,7 @@ bonsai,CE_2cfg_vgg,27.750,0.8736,0.1634,0.2317,,,"★★ CE+vgg = 0.73589 — bo
 bonsai,E2_E3_seedlaw,28.046,0.8782,,0.2649,,,"E2=0.72270 E3=0.72579 (+0.0087/+0.0118) — seed-law xác nhận cả bonsai"
 chair,MEGA6_vgg,25.066,0.7810,0.2219,0.2482,,,"★★★ MEGA6+vgg (3seed SH4 + sh3 + erank + 45k → mean → vgg) = 0.68539 — BEST chair, +0.0236 vs base. Công thức prod: seed-ens + config-members + vgg"
 bonsai,MEGA4_vgg,28.052,0.8785,0.1615,0.2265,,,"★★★ MEGA4+vgg = 0.74125 — BEST bonsai, +0.0326 vs base. PSNR 28.05 (+0.75dB so base!)"
+bonsai,N_erank_45k_blur,,,,,,,"N-erank 0.70863 (0) · N-45k 0.71085 (+0.0021 — member tốt) · ❌ N-blur 0.69926 raw / 0.70945 best-post (−0.009/+0.0007): BLUR-MATCH THẤT BẠI — geometry không sắc thêm đủ bù, loại N1"
+HCM0204half,F2_F4,,,,,,,"F2-45k 0.80400 (−0.0008 solo) · F4-erank 0.80516 (+0.0003 solo) — cả hai DƯỚI ngưỡng đơn lẻ; giữ làm ỨNG VIÊN member ensemble (bài học CE: biến thể thua đơn lẻ vẫn đóng góp ens)"
+HCM0204half,ENHXL_INVALID,,,,,,,"⚠ X-x0 0.76098 / X-x1 0.76253 VÔ HIỆU — bench lỗi thiết kế: enhance_net render @1320 (cameras.bin) nhưng GT ws images @2640 → cặp train lệch thang, net học rác. KHÔNG kết luận gì về 20k/512; đo lại SẠCH trên holdout chair/bonsai (native res). Trên scene r2 thật cameras.bin==ảnh nên B1/O5 không dính lỗi này"
+HCM0204half,CE4_HCM,27.731,0.9247,0.0380,0.0759,,,"★★ CE-HCM (3M+6M+9M+6Ms7) = 0.81345 (+0.0024 vs 2-seed 0.81102) — CONFIG-ENSEMBLE THẮNG CẢ TRÊN HCM: mixed-cap là nguồn đa dạng tốt. Prod HCM nên thêm member 3M/9M"
