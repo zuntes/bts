@@ -158,6 +158,13 @@ class Config:
     erank_reg: float = 0.0
     # BTS N1: σ blur-match cho scene GT mờ (0 = tắt) — làm mờ render trước khi tính loss
     blur_match: float = 0.0
+    # BTS W1 (học từ SoccerNet-NVS'26 winner): trọng số loss cho train view GẦN pose test
+    # (pose test BTC cho sẵn trong CSV — dùng pose hợp lệ). 0 = tắt; thử 3.0.
+    test_weight: float = 0.0
+    test_csv_path: str = ""
+    # BTS W2 (SoccerNet'26 winner): nạp splats từ ckpt rồi TRAIN TIẾP (khác --ckpt=eval-only)
+    # → member phân nhánh giá rẻ (+5k steps với reg khác nhau từ ckpt chung)
+    init_ckpt: str = ""
 
     # Enable camera optimization.
     pose_opt: bool = False
@@ -393,6 +400,36 @@ class Runner:
         self.valset = Dataset(self.parser, split="val")
         self.scene_scale = self.parser.scene_scale * 1.1 * cfg.global_scale
         print("Scene scale:", self.scene_scale)
+
+        # BTS W1: trọng số loss theo khoảng cách tới pose TEST gần nhất (winner SoccerNet'26:
+        # view kiểu-test thiếu đại diện cần weight cao). w_i = 1 + (w−1)·exp(−(d_i/d0)²),
+        # d0 = median NN-spacing của train. Pose test lấy từ CSV (hệ COLMAP gốc) → áp
+        # parser.transform để cùng hệ với camtoworlds đã chuẩn hoá.
+        self.img_loss_w = None
+        if cfg.test_weight > 0.0 and cfg.test_csv_path:
+            import csv as _csv
+            T = self.parser.transform
+            tc = []
+            for r in _csv.DictReader(open(cfg.test_csv_path)):
+                q = np.array([float(r[k]) for k in ("qw", "qx", "qy", "qz")])
+                t = np.array([float(r[k]) for k in ("tx", "ty", "tz")])
+                w, x, y, z = q
+                R = np.array([
+                    [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                    [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                    [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+                C = -R.T @ t
+                Ch = T @ np.append(C, 1.0)
+                tc.append(Ch[:3] / Ch[3] if abs(Ch[3] - 1) > 1e-6 else Ch[:3])
+            tc = np.array(tc)
+            trc = self.parser.camtoworlds[:, :3, 3]
+            d_nn = np.sort(np.linalg.norm(trc[None] - trc[:, None], axis=-1), axis=1)[:, 1]
+            d0 = max(float(np.median(d_nn)), 1e-9)
+            d_test = np.min(np.linalg.norm(trc[:, None] - tc[None], axis=-1), axis=1)
+            w_arr = 1.0 + (cfg.test_weight - 1.0) * np.exp(-((d_test / d0) ** 2))
+            self.img_loss_w = torch.from_numpy(w_arr).float().to(self.device)
+            print(f"[BTS W1] test-proximity loss weight: w∈[{w_arr.min():.2f},{w_arr.max():.2f}] "
+                  f"mean={w_arr.mean():.2f} (test_weight={cfg.test_weight}, d0={d0:.4f})")
 
         # Model
         feature_dim = 32 if cfg.app_opt else None
@@ -790,6 +827,8 @@ class Runner:
                 _colors_loss.permute(0, 3, 1, 2), pixels.permute(0, 3, 1, 2), padding="valid"
             )
             loss = l1loss * (1.0 - cfg.ssim_lambda) + ssimloss * cfg.ssim_lambda
+            if self.img_loss_w is not None:
+                loss = loss * self.img_loss_w[image_ids].mean()
             if cfg.depth_loss:
                 # query depths from depth map
                 points = torch.stack(
@@ -1294,6 +1333,12 @@ def main(local_rank: int, world_rank, world_size: int, cfg: Config):
         if cfg.compression is not None:
             runner.run_compression(step=step)
     else:
+        if cfg.init_ckpt:
+            _ck = torch.load(cfg.init_ckpt, map_location=runner.device, weights_only=True)["splats"]
+            for k in runner.splats.keys():
+                runner.splats[k].data = _ck[k].to(runner.device)
+            print(f"[BTS W2] init splats từ {cfg.init_ckpt} (N={len(_ck['means'])}) — "
+                  f"train tiếp {cfg.max_steps} steps (branch member)")
         runner.train()
 
     if not cfg.disable_viewer:
