@@ -70,3 +70,6 @@ chair,CE_4cfg_vgg,24.969,0.7784,0.2210,0.2488,,,"★★★ CE+vgg = 0.68379 (+0.
 chair,E2_E3_seedlaw,25.159,0.7801,,0.2760,,,"E2=0.67237 E3=0.67459 (+0.0088/+0.0110 vs sh4 đơn) — SEED-LAW ĐỨNG VỮNG trên scene lạ (HCM +0.0095): dự phóng SUB2 khỏi hạ"
 bonsai,CE_2cfg,27.728,0.8730,0.1829,0.2711,,,"★ CE (cap3M+sh4) = 0.71985 (+0.0111 vs base, +0.0058 vs sh4)"
 bonsai,CE_2cfg_vgg,27.750,0.8736,0.1634,0.2317,,,"★★ CE+vgg = 0.73589 — bonsai 0.709→0.736. PSNR/SSIM ĐỀU TĂNG cùng LPIPS giảm"
+bonsai,E2_E3_seedlaw,28.046,0.8782,,0.2649,,,"E2=0.72270 E3=0.72579 (+0.0087/+0.0118) — seed-law xác nhận cả bonsai"
+chair,MEGA6_vgg,25.066,0.7810,0.2219,0.2482,,,"★★★ MEGA6+vgg (3seed SH4 + sh3 + erank + 45k → mean → vgg) = 0.68539 — BEST chair, +0.0236 vs base. Công thức prod: seed-ens + config-members + vgg"
+bonsai,MEGA4_vgg,28.052,0.8785,0.1615,0.2265,,,"★★★ MEGA4+vgg = 0.74125 — BEST bonsai, +0.0326 vs base. PSNR 28.05 (+0.75dB so base!)"
