@@ -168,7 +168,11 @@ EOF
   else echo "  ⏩ images_2 có"; fi
 
   tr_rend(){ # $1=tag $2=extra_flags
-    local tag=$1 extra=$2 res="results/r2cal_${S}__${tag}"
+    # ⚠ local phải TÁCH DÒNG: bash expand ${tag} TRƯỚC khi local chạy → cùng dòng
+    # sẽ lấy giá trị tag TOÀN CỤC sót từ vòng lặp §2 (đã dính 19/07: train vào
+    # nhầm dir r2cal_HCM0204__chair__wmega, suýt làm gate W1-sharp vô hiệu)
+    local tag=$1 extra=$2
+    local res="results/r2cal_${S}__${tag}"
     if ! [ -s "$res/ckpts/ckpt_29999_rank0.pt" ]; then
       $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor 2 \
         --result-dir "$PWD/$res" --max-steps 30000 --test-every 999999 \
