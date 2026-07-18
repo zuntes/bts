@@ -104,6 +104,14 @@ train_render_seed(){   # $1=scene $2=seed $3=cap $4=branch(gut|classic)
   fi
   N_EXPECT=$(($(wc -l < "$R2/$s/test/test_poses.csv") - 1))
   [ "$(ls "$rend" | wc -l)" -eq "$N_EXPECT" ] || die "$s seed$seed render $(ls "$rend" | wc -l)/$N_EXPECT ảnh"
+
+  # PRUNE_CKPT=1 (opt-in, tiết kiệm đĩa): sau khi render ĐỦ ảnh đã verify ở trên,
+  # ckpt của seed KHÔNG-phải-đầu chỉ còn dùng để re-render → xoá được (~1-2GB/seed).
+  # Seed đầu GIỮ NGUYÊN (enhancer train từ nó). In rõ từng ckpt xoá.
+  if [ "${PRUNE_CKPT:-0}" = "1" ] && [ "$seed" != "${SEEDS%% *}" ]; then
+    echo "  🧹 PRUNE_CKPT: xoá $res/ckpts ($(du -sh "$res/ckpts" 2>/dev/null | cut -f1)) — renders đã đủ $N_EXPECT ảnh"
+    rm -rf "$res/ckpts"
+  fi
 }
 
 # ---------- vòng chính ----------

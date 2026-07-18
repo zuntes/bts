@@ -9,6 +9,7 @@ PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY=.venv/bin/python
 SUBTAG=${SUBTAG:-2}
+MIN_SEEDS=${MIN_SEEDS:-2}   # deadline gấp 19/07: chấp nhận 2 seed nếu seed thứ 3 chưa kịp xong
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
 
@@ -18,7 +19,9 @@ for s in bonsai chair HCM0421 HCM0539 HCM0540 HCM0644 HCM0674; do
   for seed in 42 7 123; do
     [ "$(ls "renders_r2/${s}__s${seed}" 2>/dev/null | wc -l)" -ge 5 ] && D="$D renders_r2/${s}__s${seed}"
   done
-  [ "$(echo $D | wc -w)" -ge 3 ] || die "$s thiếu seed renders (prod đêm chưa xong đủ?)"
+  N_SEED_OK=$(echo $D | wc -w)
+  [ "$N_SEED_OK" -ge "$MIN_SEEDS" ] || die "$s chỉ có $N_SEED_OK/$MIN_SEEDS seed renders (prod đêm chưa xong đủ?)"
+  [ "$N_SEED_OK" -lt 3 ] && echo "  ⚠ chỉ $N_SEED_OK seed (thiếu 1) — vẫn chạy tiếp, điểm sẽ thấp hơn full 3-seed 1 chút"
   for m in renders_r2/${s}__m_*; do
     [ -d "$m" ] && [ "$(ls "$m" | wc -l)" -ge 5 ] && D="$D $m"
   done
