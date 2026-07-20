@@ -178,7 +178,10 @@ EOF
         --result-dir "$PWD/$res" --max-steps 30000 --test-every 999999 \
         --disable-viewer --antialiased --with-ut --with-eval3d --raw-distortion \
         --strategy.cap-max "$CAP_SHARP" --eval-steps 30000 --save-steps 30000 --global-seed 42 \
-        $extra 2>&1 | tee "/tmp/wsharp_${tag}.log" | grep -aE "BTS W1|Error|error" || die "train $tag"
+        $extra 2>&1 | tee "/tmp/wsharp_${tag}.log" | grep -aE "BTS W1|Error|error" || true
+      # ĐỪNG die theo exit-code của grep-filter (base không in dòng khớp → grep=1 dù
+      # train OK — đã dính 19/07 trên server). Kiểm FILE thật (DOC3 §4.3):
+      [ -s "$res/ckpts/ckpt_29999_rank0.pt" ] || die "train $tag không ra ckpt — xem /tmp/wsharp_${tag}.log"
       rm -f "$res/ckpts/ckpt_14999_rank0.pt"; rm -rf "$res/videos"
     else echo "  ⏩ $tag ckpt có"; fi
     if [ "$(ls "renders_r2cal/wsharp_${tag}" 2>/dev/null | wc -l)" -lt 60 ]; then
