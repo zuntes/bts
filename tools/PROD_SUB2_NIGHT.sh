@@ -24,6 +24,11 @@ say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
 
 say "0. tiên quyết (fail sớm trước khi đụng GPU $CUDA_VISIBLE_DEVICES)"
+# LOCK: cấm 2 prod song song — đêm 19/07 double-launch làm bonsai s7 crash lúc save
+# (bản nhanh PRUNE ckpts đúng lúc bản chậm đang torch.save). FORCE=1 để bỏ qua.
+if [ "${FORCE:-0}" != "1" ] && pgrep -f "gsplat/examples/simple_trainer" >/dev/null; then
+  die "đã có simple_trainer đang chạy trên máy này — không launch prod thứ 2 (FORCE=1 nếu chắc chắn)"
+fi
 [ -x "$PY" ] || die "thiếu .venv"
 $PY -c "from pycolmap import SceneManager" 2>/dev/null || die ".venv hỏng pycolmap rmbrualla (DOC3 §3.7)"
 echo "  git HEAD: $(git log --oneline -1 2>/dev/null || echo '?')"
