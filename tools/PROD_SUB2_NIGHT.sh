@@ -41,14 +41,16 @@ nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader | se
 ENVSTR="SUBTAG=$SUBTAG SEEDS=$SEEDS PRUNE_CKPT=$PRUNE_CKPT OBJ_SH_DEGREE=4 CAP_HCM=6000000 CAP_OBJ=3000000"
 
 say "1/3 OBJ (bonsai/chair — classic SH4 cap3M ×$N_SEED seed, ~4-5h)"
+# tin EXIT-CODE thật (pipefail đã bật), KHÔNG grep ký tự ❌ trong log — đã dính 19/07:
+# log chứa ❌ vô hại → die oan sau khi OBJ xong sạch, HCM không bao giờ chạy
 SUBTAG=$SUBTAG SEEDS="$SEEDS" PRUNE_CKPT=$PRUNE_CKPT OBJ_SH_DEGREE=4 CAP_OBJ=3000000 \
-  SCENES_HCM="" bash tools/run_sub_r2.sh 2>&1 | tee /tmp/prod_obj.txt
-grep -aq "❌" /tmp/prod_obj.txt && die "OBJ có lỗi — đọc /tmp/prod_obj.txt, sửa xong chạy lại (resume-safe)"
+  SCENES_HCM="" bash tools/run_sub_r2.sh 2>&1 | tee /tmp/prod_obj.txt \
+  || die "OBJ exit lỗi — đọc /tmp/prod_obj.txt, sửa xong chạy lại (resume-safe)"
 
 say "2/3 HCM (5 scene — 3DGUT raw-distortion cap6M ×$N_SEED seed, ~11-12h)"
 SUBTAG=$SUBTAG SEEDS="$SEEDS" PRUNE_CKPT=$PRUNE_CKPT CAP_HCM=6000000 \
-  SCENES_OBJ="" bash tools/run_sub_r2.sh 2>&1 | tee /tmp/prod_hcm.txt
-grep -aq "❌" /tmp/prod_hcm.txt && die "HCM có lỗi — đọc /tmp/prod_hcm.txt, sửa xong chạy lại (resume-safe)"
+  SCENES_OBJ="" bash tools/run_sub_r2.sh 2>&1 | tee /tmp/prod_hcm.txt \
+  || die "HCM exit lỗi — đọc /tmp/prod_hcm.txt, sửa xong chạy lại (resume-safe)"
 
 say "3/3 FINALIZE — mean(seed+members) → vgg → zip q96 + contact sheet"
 SUBTAG=$SUBTAG MIN_SEEDS=$N_SEED bash tools/FINALIZE_SUB2.sh 2>&1 | tee /tmp/finalize_sub${SUBTAG}.txt || die "finalize"
