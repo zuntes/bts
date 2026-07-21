@@ -51,6 +51,9 @@ with open(f"workspace_r2/{sys.argv[1]}/sparse/0/cameras.bin", "rb") as f:
         sys.exit(f"model {model} chưa hỗ trợ")
 EOF
 }
+# S1: méo ĐO THẬT per-scene (audit_distortion). USE_TRUE_DIST=1 → dùng thay k1 lưu.
+# Đọc distortion_r2.tsv → echo "k1 k2". Chỉ bật SAU khi GATE_S1 xác nhận thắng.
+dist_true_of(){ awk -v s="$1" '$1==s{print $2, $3}' tools/distortion_r2.tsv; }
 
 say "0. tiên quyết"
 [ -x "$PY" ] || die "thiếu .venv"
@@ -71,6 +74,13 @@ train_render_seed(){   # $1=scene $2=seed $3=cap $4=branch(gut|classic)
     K1=$(k1_of "$s") || die "k1_of $s"
     UT_TRAIN="--with-ut --with-eval3d --raw-distortion"
     UT_REND="--with_ut --radial_k1 $K1"
+    if [ "${USE_TRUE_DIST:-0}" = "1" ]; then   # S1: méo đo thật (sau khi GATE_S1 thắng)
+      read TK1 TK2 <<<"$(dist_true_of "$s")"
+      [ -n "$TK1" ] || die "USE_TRUE_DIST=1 nhưng thiếu $s trong distortion_r2.tsv"
+      UT_TRAIN="$UT_TRAIN --dist-k1-override $TK1 --dist-k2-override $TK2"
+      UT_REND="--with_ut --radial_k1 $TK1 --radial_k2 $TK2"
+      echo "  [S1] $s méo thật k1=$TK1 k2=$TK2"
+    fi
   else
     UT_TRAIN="--sh-degree $OBJ_SH_DEGREE"   # O4: SH4 cho scene vật liệu khó nếu gate thắng
   fi
@@ -147,7 +157,14 @@ fi
   # Enhancer per-scene (ENH_ARCH=vgg: B1 restoration prior thắng L16-unet +0.0052, GATE_B 17/07)
   FIRST_SEED=${SEEDS%% *}
   L16_FLAGS=""
-  [ "$branch" = gut ] && L16_FLAGS="--with_ut --radial_k1 $(k1_of "$s")"
+  if [ "$branch" = gut ]; then
+    if [ "${USE_TRUE_DIST:-0}" = "1" ]; then
+      read TK1 TK2 <<<"$(dist_true_of "$s")"
+      L16_FLAGS="--with_ut --radial_k1 $TK1 --radial_k2 $TK2"
+    else
+      L16_FLAGS="--with_ut --radial_k1 $(k1_of "$s")"
+    fi
+  fi
   NET="results/r2_${s}__enh_${ENH_ARCH}/net.pt"
   if ! [ -s "$NET" ]; then
     $PY tools/enhance_net.py train --workspace "workspace_r2/$s" \

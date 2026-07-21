@@ -87,7 +87,7 @@ def build_net(arch, ch_mult=1):
     return UNetVGG() if arch == "vgg" else UNetSmall(ch_mult=ch_mult)
 
 
-def render_train_views(ws, ckpt_path, out_dir, with_ut, radial_k1, antialiased=True):
+def render_train_views(ws, ckpt_path, out_dir, with_ut, radial_k1, antialiased=True, radial_k2=0.0):
     """Render mọi train view của workspace từ ckpt (skip nếu đã đủ)."""
     from colmap_io import read_cameras_bin, read_images_bin, read_points3D_bin
     from normalize_compat import (colmap_w2c_to_normalized_viewmat,
@@ -113,7 +113,7 @@ def render_train_views(ws, ckpt_path, out_dir, with_ut, radial_k1, antialiased=T
     if with_ut:
         kw = dict(with_ut=True, with_eval3d=True, packed=False)
         if radial_k1 is not None:
-            kw["radial_coeffs"] = torch.tensor([[radial_k1, 0, 0, 0, 0, 0]],
+            kw["radial_coeffs"] = torch.tensor([[radial_k1, radial_k2, 0, 0, 0, 0]],
                                                device=dev).float()
     with torch.no_grad():
         for i, im in enumerate(items):
@@ -144,7 +144,7 @@ def cmd_train(a):
     dev = "cuda"
     ws = Path(a.workspace)
     rt_dir = Path(a.out).parent / "renders_train"
-    render_train_views(ws, a.ckpt, rt_dir, a.with_ut, a.radial_k1)
+    render_train_views(ws, a.ckpt, rt_dir, a.with_ut, a.radial_k1, radial_k2=a.radial_k2)
     stems = sorted(p.stem for p in rt_dir.glob("*.png"))
     # nạp cặp (render, GT) lên RAM dạng uint8
     gt_dir = ws / "images"
@@ -258,6 +258,7 @@ if __name__ == "__main__":
     t.add_argument("--out", required=True)
     t.add_argument("--with_ut", action="store_true")
     t.add_argument("--radial_k1", type=float, default=None)
+    t.add_argument("--radial_k2", type=float, default=0.0)
     t.add_argument("--steps", type=int, default=3000)
     t.add_argument("--patch", type=int, default=256)
     t.add_argument("--batch", type=int, default=4)
