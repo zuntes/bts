@@ -29,9 +29,13 @@ GT="VAI_NVS_DATA/phase1/public_set/$S/test/images"
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
 
-gpu_busy(){ local g free; g=$(echo "${CUDA_VISIBLE_DEVICES:-0}" | cut -d, -f1)
+# bận nếu FREE < ngưỡng adaptive = min(18GB, 55% tổng VRAM) trên ĐÚNG GPU được gán
+# (18GB cứng làm 4060 8GB treo mãi; 55% total để server share-tenant vẫn qua).
+gpu_busy(){ local g free tot thr; g=$(echo "${CUDA_VISIBLE_DEVICES:-0}" | cut -d, -f1)
   free=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits -i "$g" 2>/dev/null | head -1)
-  [ "${free:-0}" -lt 18000 ]; }
+  tot=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits -i "$g" 2>/dev/null | head -1)
+  thr=$(( tot*55/100 )); [ "$thr" -gt 18000 ] && thr=18000
+  [ "${free:-0}" -lt "$thr" ]; }
 for i in $(seq 1 300); do gpu_busy || break; [ "$i" = 1 ] && echo "[$(date +%H:%M)] chờ GPU..."; sleep 60; done
 gpu_busy && die "GPU bận >5h"
 
