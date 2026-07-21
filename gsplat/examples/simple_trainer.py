@@ -165,6 +165,14 @@ class Config:
     # BTS W2 (SoccerNet'26 winner): nạp splats từ ckpt rồi TRAIN TIẾP (khác --ckpt=eval-only)
     # → member phân nhánh giá rẻ (+5k steps với reg khác nhau từ ckpt chung)
     init_ckpt: str = ""
+    # BTS S3 (20/07) — SHARPNESS-WEIGHTED LOSS cho scene VIDEO mờ-không-đều.
+    # Bệnh đo được: chair lapvar p10=383 vs mean=1369 (bonsai 50 vs 234) — vài frame
+    # mờ nặng KÉO TỤT model vì MCMC coi mọi view ngang nhau; render ra lapvar 703
+    # < GT mean 1369 = model MỜ HƠN dữ liệu nó học. Đây KHÁC blur-match (đã loại,
+    # làm mờ render) và KHÁC W1 (đã loại, weight theo pose): weight theo CHẤT LƯỢNG ảnh.
+    # w_i = (lapvar_i / median)^gamma, clamp [1/cap, cap] rồi chuẩn hoá mean=1.
+    sharp_weight: float = 0.0   # gamma; 0 = tắt. Thử 0.5 (nhẹ) / 1.0 (mạnh)
+    sharp_cap: float = 3.0
 
     # Enable camera optimization.
     pose_opt: bool = False
@@ -430,6 +438,24 @@ class Runner:
             self.img_loss_w = torch.from_numpy(w_arr).float().to(self.device)
             print(f"[BTS W1] test-proximity loss weight: w∈[{w_arr.min():.2f},{w_arr.max():.2f}] "
                   f"mean={w_arr.mean():.2f} (test_weight={cfg.test_weight}, d0={d0:.4f})")
+
+        # BTS S3 — sharpness-weighted loss: frame NÉT dạy nhiều hơn frame MỜ.
+        # Đo lapvar (variance of Laplacian) trên chính ảnh train đã nạp bởi parser.
+        if cfg.sharp_weight > 0.0:
+            import cv2 as _cv2
+            lv = []
+            for _p in self.parser.image_paths:
+                _im = _cv2.imread(str(_p), _cv2.IMREAD_GRAYSCALE)
+                lv.append(_cv2.Laplacian(_im, _cv2.CV_64F).var() if _im is not None else 1.0)
+            lv = np.array(lv, dtype=np.float64)
+            med = max(float(np.median(lv)), 1e-9)
+            w = np.clip((lv / med) ** cfg.sharp_weight, 1.0 / cfg.sharp_cap, cfg.sharp_cap)
+            w = w / w.mean()                      # giữ nguyên thang loss tổng thể
+            sw = torch.from_numpy(w).float().to(self.device)
+            self.img_loss_w = sw if self.img_loss_w is None else self.img_loss_w * sw
+            print(f"[BTS S3] sharpness weight: lapvar med={med:.0f} "
+                  f"[{lv.min():.0f}..{lv.max():.0f}] → w∈[{w.min():.2f},{w.max():.2f}] "
+                  f"(gamma={cfg.sharp_weight}, cap={cfg.sharp_cap})")
 
         # Model
         feature_dim = 32 if cfg.app_opt else None
