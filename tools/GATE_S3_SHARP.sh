@@ -25,13 +25,15 @@ S3_GAMMAS=${S3_GAMMAS:-"1.0 0.5"}
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
 
-# đợi GPU rảnh (gate khác có thể đang chạy) — tối đa 4h
+# đợi GPU rảnh — kiểm VRAM THẬT (không pgrep tên: khớp nhầm shell/commit-msg chứa
+# chữ 'simple_trainer'; đã dính 21/07 kẹt 2h). VRAM<2GB used = rảnh.
+gpu_busy(){ local u; u=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1); [ "${u:-0}" -gt 2000 ]; }
 for i in $(seq 1 240); do
-  pgrep -f "ref_enhance|simple_trainer" >/dev/null || break
-  [ "$i" = 1 ] && echo "[$(date +%H:%M)] GPU đang bận — xếp hàng chờ..."
+  gpu_busy || break
+  [ "$i" = 1 ] && echo "[$(date +%H:%M)] GPU đang bận (VRAM) — xếp hàng chờ..."
   sleep 60
 done
-pgrep -f "ref_enhance|simple_trainer" >/dev/null && die "GPU vẫn bận sau 4h — dừng"
+gpu_busy && die "GPU vẫn bận sau 4h — dừng"
 
 score(){ $PY tools/score_local.py --pred_dir "$1" --gt_dir "workspace_r2v/$2/val_gt" 2>/dev/null \
          | grep -aE "n=|★" | sed "s/^/  [$3] /"; }
