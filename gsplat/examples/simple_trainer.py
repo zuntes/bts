@@ -216,6 +216,11 @@ class Config:
     # Parser bỏ undistort; distortion COLMAP được đưa vào rasterization qua
     # radial/tangential_coeffs (cần with_ut + with_eval3d — 3DGUT).
     raw_distortion: bool = False
+    # BTS S1 — override méo bằng giá trị đo thật (audit_distortion.py). None = giữ cameras.bin.
+    dist_k1_override: Optional[float] = None
+    dist_k2_override: Optional[float] = None
+    dist_p1_override: Optional[float] = None
+    dist_p2_override: Optional[float] = None
     # BTS L14: MCMC hướng test-frustum — decay opacity gaussians vô hình từ mọi
     # test pose để relocation dồn ngân sách cap vào vùng được chấm (tools/l14_...py)
     test_frustum_csv: Optional[str] = None
@@ -392,13 +397,26 @@ class Runner:
                 "raw_distortion hiện chỉ hỗ trợ 1 bộ distortion chung"
             )
             k1, k2, p1, p2 = [float(v) for v in dists[0]]
+            # BTS S1 (21/07) — OVERRIDE méo bằng giá trị ĐO THẬT (audit_distortion.py).
+            # cameras.bin lưu SIMPLE_RADIAL k1 đơn (fit 1-param của lens thật) — SAI:
+            # lens drone thật k1≈−0.003 + k2≈+0.018 (đo nhất quán 5/5 scene HCM r2).
+            # Train+render CÙNG méo đúng → geometry sắc hơn, KHÔNG đụng pose (khác B2).
+            if cfg.dist_k1_override is not None:
+                k1 = cfg.dist_k1_override
+            if cfg.dist_k2_override is not None:
+                k2 = cfg.dist_k2_override
+            if cfg.dist_p1_override is not None:
+                p1 = cfg.dist_p1_override
+            if cfg.dist_p2_override is not None:
+                p2 = cfg.dist_p2_override
             self.radial_coeffs = torch.tensor(
                 [[k1, k2, 0.0, 0.0, 0.0, 0.0]], device=self.device
             )
             if p1 != 0.0 or p2 != 0.0:
                 self.tangential_coeffs = torch.tensor([[p1, p2]], device=self.device)
             print(f"[BTS raw_distortion] radial=[{k1:.6f}, {k2:.6f}], "
-                  f"tangential=[{p1:.6f}, {p2:.6f}]")
+                  f"tangential=[{p1:.6f}, {p2:.6f}]"
+                  + ("  (OVERRIDE)" if cfg.dist_k2_override is not None else ""))
         self.trainset = Dataset(
             self.parser,
             split="train",
