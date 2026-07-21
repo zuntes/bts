@@ -53,7 +53,8 @@ score(){ $PY tools/score_local.py --pred_dir "$1" --gt_dir "$GT" 2>/dev/null | g
 
 # train (override méo) + render (méo khớp) + score
 run(){  # $1=tag $2=train_override_flags $3=render_k1 $4=render_k2
-  local tag=$1 ovr=$2 rk1=$3 rk2=$4 res="results/s1_${S}__${tag}" rend="renders_s1/${tag}"
+  local tag=$1 ovr=$2 rk1=$3 rk2=$4
+  local res="results/s1_${S}__${tag}" rend="renders_s1/${tag}"
   say "$tag — train méo=[$rk1,$rk2]"
   if ! [ -s "$res/ckpts/ckpt_29999_rank0.pt" ]; then
     $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor 1 \

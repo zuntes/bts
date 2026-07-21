@@ -57,7 +57,8 @@ score(){ $PY tools/score_local.py --pred_dir "$1" --gt_dir "$GT" 2>/dev/null | g
 
 # train 1 biến thể (extra flags cho phần TRAIN)
 train(){  # $1=tag $2=extra_train_flags
-  local tag=$1 extra=$2 res="results/qhcm_${S}__${tag}"
+  local tag=$1 extra=$2
+  local res="results/qhcm_${S}__${tag}"
   if ! [ -s "$res/ckpts/ckpt_29999_rank0.pt" ]; then
     $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor 1 \
       --result-dir "$PWD/$res" --max-steps 30000 --test-every 999999 \
@@ -72,7 +73,8 @@ train(){  # $1=tag $2=extra_train_flags
 
 # render (tuỳ chọn supersample) + score
 rend_score(){  # $1=ckpt $2=tag $3=ss(1|2)
-  local ck=$1 tag=$2 ss=${3:-1} rend="renders_qhcm/${tag}"
+  local ck=$1 tag=$2 ss=${3:-1}
+  local rend="renders_qhcm/${tag}"
   local ssflag=""; [ "$ss" = 2 ] && ssflag="--supersample 2"
   if [ "$(ls "$rend" 2>/dev/null | wc -l)" -lt 60 ]; then
     $PY tools/render_test_poses.py --ckpt "$ck" --csv "$CSV" --out "$rend" \
