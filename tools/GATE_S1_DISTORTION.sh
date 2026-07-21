@@ -29,7 +29,12 @@ CSV="VAI_NVS_DATA/phase1/public_set/$S/test/test_poses.csv"
 GT="VAI_NVS_DATA/phase1/public_set/$S/test/images"
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
-gpu_busy(){ local u; u=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits|head -1); [ "${u:-0}" -gt 2000 ]; }
+# check FREE mem trên ĐÚNG GPU được gán (server share tenant: GPU nào cũng có VLLM/unsloth
+# chiếm sẵn vài GB → check "used<2000" SAI; và head -1 luôn đọc GPU0 bất kể CUDA_VISIBLE_DEVICES).
+# Cần ~16GB cho 6M full-res → coi là bận nếu FREE < 18GB.
+gpu_busy(){ local g free; g=$(echo "${CUDA_VISIBLE_DEVICES:-0}" | cut -d, -f1)
+  free=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits -i "$g" 2>/dev/null | head -1)
+  [ "${free:-0}" -lt 18000 ]; }
 for i in $(seq 1 300); do gpu_busy || break; [ "$i" = 1 ] && echo "[$(date +%H:%M)] chờ GPU..."; sleep 60; done
 gpu_busy && die "GPU bận >5h"
 
