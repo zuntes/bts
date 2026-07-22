@@ -64,7 +64,7 @@ run(){  # $1=tag $2=cap $3=steps $4=rk1 $5=rk2 $6=ss $7=nseed $8=extra
     dirs="$dirs $rd"
   done
   if [ "$nseed" -gt 1 ]; then $PY tools/ensemble.py --dirs $dirs --out "$rend" --mode mean >/dev/null || { echo "  ⚠ ens fail"; return 0; }
-  else rend=$dirs; fi
+  else rend="renders_mega/${tag}_s${SEED}"; fi   # single-seed: path TRỰC TIẾP (tránh leading-space từ $dirs → score fail)
   local v; v=$($PY tools/score_local.py --pred_dir "$rend" --gt_dir "$GT" 2>/dev/null | grep -a "PSNR_max=50" | grep -oE "[0-9]+\.[0-9]+$")
   [ -n "$v" ] || { echo "  ⚠ score fail $tag"; return 0; }
   echo "$v" > "$cf"
