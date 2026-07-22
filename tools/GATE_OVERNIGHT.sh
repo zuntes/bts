@@ -17,9 +17,17 @@ PY=.venv/bin/python
 S=HCM0204; K1=0.010009930826722385
 K1T=-0.00117; K2T=0.01710
 SEED=${SEED:-42}; CAPB=${CAPB:-6000000}
-CSV="VAI_NVS_DATA/phase1/public_set/$S/test/test_poses.csv"
-GT="VAI_NVS_DATA/phase1/public_set/$S/test/images"
-CACHE=results/night_cache; mkdir -p "$CACHE"
+# RES=half (mặc định, NHANH 3× + đúng res round-2 gốc/4) hoặc full (bàn native chậm)
+RES=${RES:-half}
+if [ "$RES" = half ]; then
+  DF=2; CSV="workspace_r2cal/test_poses_half.csv"; GT="workspace_r2cal/gt_half"
+  CACHE=results/night_cache_half
+else
+  DF=1; CSV="VAI_NVS_DATA/phase1/public_set/$S/test/test_poses.csv"
+  GT="VAI_NVS_DATA/phase1/public_set/$S/test/images"; CACHE=results/night_cache
+fi
+mkdir -p "$CACHE"
+echo "  RES=$RES (data-factor $DF) · bàn=$GT"
 say(){ echo; echo "[$(date +%H:%M)] ═════ $* ═════"; }
 die(){ echo "❌ $*"; exit 1; }
 gpu_busy(){ local g free tot thr; g=$(echo "${CUDA_VISIBLE_DEVICES:-0}" | cut -d, -f1)
@@ -44,9 +52,9 @@ run(){  # $1=tag $2=cap $3=steps $4=render_k1 $5=render_k2 $6=ss $7=extra_train
     printf "  [%-10s] %s  Δ=%s (cache)\n" "$tag" "$v" "$d"; return 0
   fi
   say "$tag — cap=$cap steps=$steps refine_stop=$stop k=[$rk1,$rk2] ss=$ss $extra"
-  local FREE; FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ "$FREE" -lt 12 ] && die "đĩa ${FREE}GB<12"
+  local FREE; FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ "$FREE" -lt 8 ] && die "đĩa ${FREE}GB<8"
   if ! [ -s "$ck" ]; then
-    $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor 1 \
+    $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor $DF \
       --result-dir "$PWD/$res" --max-steps "$steps" --test-every 999999 \
       --disable-viewer --antialiased --with-ut --with-eval3d --raw-distortion \
       --strategy.cap-max "$cap" --strategy.refine-stop-iter "$stop" \
