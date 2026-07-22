@@ -16,9 +16,9 @@ unset BTS_TMASK
 PY=.venv/bin/python
 S=HCM0204; K1=0.010009930826722385
 K1T=-0.00117; K2T=0.01710
-SEED=${SEED:-42}; CAPB=${CAPB:-6000000}
-# RES=half (mặc định, NHANH 3× + đúng res round-2 gốc/4) hoặc full (bàn native chậm)
-RES=${RES:-half}
+SEED=${SEED:-42}; CAPB=${CAPB:-3000000}   # base 3M = nhanh cho param sweep; cap test riêng 6/9/12M
+# ⚠ workspace_raw/HCM0204 = 1320×989 = ĐÚNG res round-2 (đo trên đĩa). half(660×494) SAI — quá nhỏ.
+RES=${RES:-full}
 if [ "$RES" = half ]; then
   DF=2; CSV="workspace_r2cal/test_poses_half.csv"; GT="workspace_r2cal/gt_half"
   CACHE=results/night_cache_half
@@ -81,8 +81,10 @@ run base "$CAPB" 30000 "$K1" 0 1 ""
 BASEV=$(cat "$CACHE/base.v50")
 echo "  → BASE v50 = $BASEV (mọi Δ tính từ đây)"
 run s1true   "$CAPB" 30000 "$K1T" "$K2T" 1 "--dist-k1-override $K1T --dist-k2-override $K2T"  # re-confirm S1 +0.005
-run cap9M    9000000 30000 "$K1"  0 1 ""   # re-validate knee (native muốn thêm hạt?)
-run cap12M   12000000 30000 "$K1" 0 1 ""   # knee native = full-res 12M?
+# KNEE trên bàn ĐÚNG 1320×989: đường cong 3M(base)→6M→9M→12M. prod đang 6M — có under-cap?
+run cap6M    6000000 30000 "$K1"  0 1 ""   # = production hiện tại
+run cap9M    9000000 30000 "$K1"  0 1 ""
+run cap12M   12000000 30000 "$K1" 0 1 ""   # GATE_CAP cũ đo knee 12M ở res này — xác nhận
 run s45k     "$CAPB" 45000 "$K1"  0 1 ""    # STEP đúng cách (refine_stop scale) — 60k cũ crippled
 
 # ============ B. THAM SỐ CHƯA TUNE (bỏ oan) ============
@@ -110,7 +112,7 @@ fi
 
 # ============ D. STACK ứng viên thắng (S1 là nền chắc) ============
 say "D. STACK S1 + cap9M (2 đòn nền nếu đều thắng)"
-run s1_cap9M 9000000 30000 "$K1T" "$K2T" 1 "--dist-k1-override $K1T --dist-k2-override $K2T"
+run s1_cap12M 12000000 30000 "$K1T" "$K2T" 1 "--dist-k1-override $K1T --dist-k2-override $K2T"
 
 echo
 echo "########################################################################"
