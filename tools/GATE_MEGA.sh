@@ -120,6 +120,12 @@ elif [ -s "$BCK" ]; then
   [ -n "$V" ] && { echo "$V">"$CACHE/base_ss2.v50"; printf "  ★ [base_ss2] v50=%s Δ=%s\n" "$V" "$(.venv/bin/python -c "print(f'{$V-$BASEV:+.5f}')")"; }
 fi
 
+# ═══════ Fs. SEED-COUNT audit (3→5 chưa đo — user hỏi đúng) ═══════
+say "Fs. SEED SWEEP 1→2→3→5 @3M (luật 1/√N: 2seed+0.0069, 3seed+0.0026 đã đo; 5 chưa)"
+run seed2 3000000 30000 "$K1" 0 1 2 ""
+run seed3 3000000 30000 "$K1" 0 1 3 ""
+run seed5 3000000 30000 "$K1" 0 1 5 ""
+
 # ═══════ F. STACK TỔNG (gộp đòn thắng — cấu hình SUB3 ứng viên) ═══════
 say "F. STACK cuối: S1+cap12M+step + ensemble 2-seed (production config thật)"
 run s1_12M_45k 12000000 45000 "$K1T" "$K2T" 1 1 "--dist-k1-override $K1T --dist-k2-override $K2T"
