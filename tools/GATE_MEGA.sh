@@ -44,7 +44,8 @@ run(){  # $1=tag $2=cap $3=steps $4=rk1 $5=rk2 $6=ss $7=nseed $8=extra
   local dirs=""
   for sd in $(seq 0 $((nseed-1))); do
     local sv=$((SEED + sd*100))
-    local res="results/mega_${S}__${tag}_s${sv}" ck="$res/ckpts/ckpt_$((steps-1))_rank0.pt"
+    local res="results/mega_${S}__${tag}_s${sv}"
+    local ck="$res/ckpts/ckpt_$((steps-1))_rank0.pt"
     if ! [ -s "$ck" ]; then
       $PY gsplat/examples/simple_trainer.py mcmc --data-dir "workspace_raw/$S" --data-factor 1 \
         --result-dir "$PWD/$res" --max-steps "$steps" --test-every 999999 \
@@ -120,10 +121,8 @@ elif [ -s "$BCK" ]; then
   [ -n "$V" ] && { echo "$V">"$CACHE/base_ss2.v50"; printf "  ★ [base_ss2] v50=%s Δ=%s\n" "$V" "$(.venv/bin/python -c "print(f'{$V-$BASEV:+.5f}')")"; }
 fi
 
-# ═══════ Fs. SEED-COUNT audit (3→5 chưa đo — user hỏi đúng) ═══════
-say "Fs. SEED SWEEP 1→2→3→5 @3M (luật 1/√N: 2seed+0.0069, 3seed+0.0026 đã đo; 5 chưa)"
-run seed2 3000000 30000 "$K1" 0 1 2 ""
-run seed3 3000000 30000 "$K1" 0 1 3 ""
+# ═══════ Fs. SEED-5 audit (2/3-seed ĐÃ confirm tăng — chỉ cần chắc 5 vẫn tăng) ═══════
+say "Fs. SEED-5 @3M (2seed+0.0069, 3seed+0.0026 đã đo → chỉ test 5 xem còn đáng thêm)"
 run seed5 3000000 30000 "$K1" 0 1 5 ""
 
 # ═══════ F. STACK TỔNG (gộp đòn thắng — cấu hình SUB3 ứng viên) ═══════
