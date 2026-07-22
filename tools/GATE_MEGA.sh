@@ -106,6 +106,8 @@ run noise1e6 3000000 30000 "$K1" 0 1 1 "--strategy.noise-lr 1000000"
 run noise2e6 3000000 30000 "$K1" 0 1 1 "--strategy.noise-lr 2000000"
 run minop01 3000000 30000 "$K1" 0 1 1 "--strategy.min-opacity 0.01"
 run minop02 3000000 30000 "$K1" 0 1 1 "--strategy.min-opacity 0.02"
+run erank   3000000 30000 "$K1" 0 1 1 "--erank-reg 0.1"    # needle-reg: half-res +0.0003, full-res chưa test (anten/cột BTS)
+run erank5  3000000 30000 "$K1" 0 1 1 "--erank-reg 0.5"
 
 # ═══════ E. RENDER supersample×2 (không retrain — reuse base ckpt) ═══════
 say "E. RENDER supersample×2 trên NÉT"
